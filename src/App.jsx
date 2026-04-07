@@ -679,7 +679,13 @@ export default function App() {
     e.target.value = "";
   };
 
-  const printCurrentPage = () => window.print();
+  const printCurrentPage = () => {
+    if (activeTab === "project_view" && !selectedProjectId) {
+      alert("Please select a project first.");
+      return;
+    }
+    window.print();
+  };
 
   const filteredEmployees = useMemo(() => {
     const q = searchEmployee.trim().toLowerCase();
@@ -826,39 +832,43 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div style={tableWrap}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Emp No</th>
-                      <th style={thStyle}>Employee</th>
-                      <th style={thStyle}>Designation</th>
-                      <th style={thStyle}>Current Project</th>
-                      <th style={thStyle}>Regular Hours</th>
-                      <th style={thStyle}>OT Hours</th>
-                      <th style={thStyle}>Total Hours</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {hoursSummary.length > 0 ? (
-                      hoursSummary.map((row) => (
-                        <tr key={row.employee_id}>
-                          <td style={tdStyle}>{row.emp_no}</td>
-                          <td style={tdStyle}>{row.name_en}</td>
-                          <td style={tdStyle}>{row.designation}</td>
-                          <td style={tdStyle}>{row.current_project || "-"}</td>
-                          <td style={tdStyle}>{row.total_regular_hours}</td>
-                          <td style={tdStyle}>{row.total_overtime_hours}</td>
-                          <td style={tdStyle}>{row.total_hours}</td>
-                        </tr>
-                      ))
-                    ) : (
+              <div className="print-area">
+                <div className="print-report-title">Employee Hours Summary</div>
+                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <div style={tableWrap}>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td style={emptyTd} colSpan="7">No data found</td>
+                        <th style={thStyle}>Emp No</th>
+                        <th style={thStyle}>Employee</th>
+                        <th style={thStyle}>Designation</th>
+                        <th style={thStyle}>Current Project</th>
+                        <th style={thStyle}>Regular Hours</th>
+                        <th style={thStyle}>OT Hours</th>
+                        <th style={thStyle}>Total Hours</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {hoursSummary.length > 0 ? (
+                        hoursSummary.map((row) => (
+                          <tr key={row.employee_id}>
+                            <td style={tdStyle}>{row.emp_no}</td>
+                            <td style={tdStyle}>{row.name_en}</td>
+                            <td style={tdStyle}>{row.designation}</td>
+                            <td style={tdStyle}>{row.current_project || "-"}</td>
+                            <td style={tdStyle}>{row.total_regular_hours}</td>
+                            <td style={tdStyle}>{row.total_overtime_hours}</td>
+                            <td style={tdStyle}>{row.total_hours}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td style={emptyTd} colSpan="7">No data found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>
@@ -930,52 +940,55 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div style={subInfoText}>
-                Showing <strong style={{ color: "#ffffff" }}>{filteredEmployees.length}</strong> record(s)
-              </div>
-
-              <div style={tableWrap}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Emp No</th>
-                      <th style={thStyle}>Name EN</th>
-                      <th style={thStyle}>Name AR</th>
-                      <th style={thStyle}>Designation</th>
-                      <th style={thStyle}>Rig</th>
-                      <th style={thStyle}>Shift</th>
-                      <th style={thStyle}>Current Project</th>
-                      <th style={thStyle}>Status</th>
-                      <th className="no-print" style={thStyle}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredEmployees.length > 0 ? (
-                      filteredEmployees.map((emp) => (
-                        <tr key={emp.id}>
-                          <td style={tdStyle}>{emp.emp_no}</td>
-                          <td style={tdStyle}>{emp.name_en}</td>
-                          <td style={tdStyle}>{emp.name_ar}</td>
-                          <td style={tdStyle}>{emp.designation}</td>
-                          <td style={tdStyle}>{emp.rig_no}</td>
-                          <td style={tdStyle}>{emp.shift}</td>
-                          <td style={tdStyle}>{emp.current_project || "-"}</td>
-                          <td style={tdStyle}>{emp.status || "-"}</td>
-                          <td className="no-print" style={tdStyle}>
-                            <div style={smallActionWrap}>
-                              <button type="button" onClick={() => startEditEmployee(emp)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
-                              <button type="button" onClick={() => deleteEmployee(emp.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
+              <div className="print-area">
+                <div className="print-report-title">Employees List</div>
+                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <div style={subInfoText} className="no-print">
+                  Showing <strong style={{ color: "#ffffff" }}>{filteredEmployees.length}</strong> record(s)
+                </div>
+                <div style={tableWrap}>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td style={emptyTd} colSpan="9">No employees found</td>
+                        <th style={thStyle}>Emp No</th>
+                        <th style={thStyle}>Name EN</th>
+                        <th style={thStyle}>Name AR</th>
+                        <th style={thStyle}>Designation</th>
+                        <th style={thStyle}>Rig</th>
+                        <th style={thStyle}>Shift</th>
+                        <th style={thStyle}>Current Project</th>
+                        <th style={thStyle}>Status</th>
+                        <th className="no-print" style={thStyle}>Actions</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredEmployees.length > 0 ? (
+                        filteredEmployees.map((emp) => (
+                          <tr key={emp.id}>
+                            <td style={tdStyle}>{emp.emp_no}</td>
+                            <td style={tdStyle}>{emp.name_en}</td>
+                            <td style={tdStyle}>{emp.name_ar}</td>
+                            <td style={tdStyle}>{emp.designation}</td>
+                            <td style={tdStyle}>{emp.rig_no}</td>
+                            <td style={tdStyle}>{emp.shift}</td>
+                            <td style={tdStyle}>{emp.current_project || "-"}</td>
+                            <td style={tdStyle}>{emp.status || "-"}</td>
+                            <td className="no-print" style={tdStyle}>
+                              <div style={smallActionWrap}>
+                                <button type="button" onClick={() => startEditEmployee(emp)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
+                                <button type="button" onClick={() => deleteEmployee(emp.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td style={emptyTd} colSpan="9">No employees found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>
@@ -1033,43 +1046,47 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div style={tableWrap}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Project Name</th>
-                      <th style={thStyle}>Code</th>
-                      <th style={thStyle}>Location</th>
-                      <th style={thStyle}>Status</th>
-                      <th style={thStyle}>Employees Count</th>
-                      <th className="no-print" style={thStyle}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProjects.length > 0 ? (
-                      filteredProjects.map((project) => (
-                        <tr key={project.id}>
-                          <td style={tdStyle}>{project.project_name}</td>
-                          <td style={tdStyle}>{project.project_code || "-"}</td>
-                          <td style={tdStyle}>{project.location || "-"}</td>
-                          <td style={tdStyle}>{project.status || "-"}</td>
-                          <td style={tdStyle}>{project.employees_count}</td>
-                          <td className="no-print" style={tdStyle}>
-                            <div style={smallActionWrap}>
-                              <button type="button" onClick={() => startEditProject(project)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
-                              <button type="button" onClick={() => { setSelectedProjectId(String(project.id)); setActiveTab("project_view"); }} style={{ ...miniButton, background: buttonPrimary }}>View Employees</button>
-                              <button type="button" onClick={() => deleteProject(project.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
+              <div className="print-area">
+                <div className="print-report-title">Projects List</div>
+                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <div style={tableWrap}>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td style={emptyTd} colSpan="6">No projects found</td>
+                        <th style={thStyle}>Project Name</th>
+                        <th style={thStyle}>Code</th>
+                        <th style={thStyle}>Location</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Employees Count</th>
+                        <th className="no-print" style={thStyle}>Actions</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredProjects.length > 0 ? (
+                        filteredProjects.map((project) => (
+                          <tr key={project.id}>
+                            <td style={tdStyle}>{project.project_name}</td>
+                            <td style={tdStyle}>{project.project_code || "-"}</td>
+                            <td style={tdStyle}>{project.location || "-"}</td>
+                            <td style={tdStyle}>{project.status || "-"}</td>
+                            <td style={tdStyle}>{project.employees_count}</td>
+                            <td className="no-print" style={tdStyle}>
+                              <div style={smallActionWrap}>
+                                <button type="button" onClick={() => startEditProject(project)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
+                                <button type="button" onClick={() => { setSelectedProjectId(String(project.id)); setActiveTab("project_view"); }} style={{ ...miniButton, background: buttonPrimary }}>View Employees</button>
+                                <button type="button" onClick={() => deleteProject(project.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td style={emptyTd} colSpan="6">No projects found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>
@@ -1127,41 +1144,45 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div style={tableWrap}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Emp No</th>
-                      <th style={thStyle}>Employee</th>
-                      <th style={thStyle}>Designation</th>
-                      <th style={thStyle}>Project</th>
-                      <th style={thStyle}>Assigned At</th>
-                      <th style={thStyle}>Notes</th>
-                      <th className="no-print" style={thStyle}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAssignments.length > 0 ? (
-                      filteredAssignments.map((row) => (
-                        <tr key={row.id}>
-                          <td style={tdStyle}>{row.emp_no}</td>
-                          <td style={tdStyle}>{row.name_en}</td>
-                          <td style={tdStyle}>{row.designation}</td>
-                          <td style={tdStyle}>{row.project_name}</td>
-                          <td style={tdStyle}>{row.assigned_at}</td>
-                          <td style={tdStyle}>{row.notes || "-"}</td>
-                          <td className="no-print" style={tdStyle}>
-                            <button type="button" onClick={() => unassignEmployee(row.employee_id)} style={{ ...miniButton, background: buttonDanger }}>Unassign</button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
+              <div className="print-area">
+                <div className="print-report-title">Current Assignments</div>
+                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <div style={tableWrap}>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td style={emptyTd} colSpan="7">No assignments found</td>
+                        <th style={thStyle}>Emp No</th>
+                        <th style={thStyle}>Employee</th>
+                        <th style={thStyle}>Designation</th>
+                        <th style={thStyle}>Project</th>
+                        <th style={thStyle}>Assigned At</th>
+                        <th style={thStyle}>Notes</th>
+                        <th className="no-print" style={thStyle}>Actions</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredAssignments.length > 0 ? (
+                        filteredAssignments.map((row) => (
+                          <tr key={row.id}>
+                            <td style={tdStyle}>{row.emp_no}</td>
+                            <td style={tdStyle}>{row.name_en}</td>
+                            <td style={tdStyle}>{row.designation}</td>
+                            <td style={tdStyle}>{row.project_name}</td>
+                            <td style={tdStyle}>{row.assigned_at}</td>
+                            <td style={tdStyle}>{row.notes || "-"}</td>
+                            <td className="no-print" style={tdStyle}>
+                              <button type="button" onClick={() => unassignEmployee(row.employee_id)} style={{ ...miniButton, background: buttonDanger }}>Unassign</button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td style={emptyTd} colSpan="7">No assignments found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>
@@ -1212,43 +1233,47 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div style={tableWrap}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Date</th>
-                      <th style={thStyle}>Emp No</th>
-                      <th style={thStyle}>Employee</th>
-                      <th style={thStyle}>Project</th>
-                      <th style={thStyle}>Regular Hours</th>
-                      <th style={thStyle}>OT Hours</th>
-                      <th style={thStyle}>Notes</th>
-                      <th className="no-print" style={thStyle}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredWorkEntries.length > 0 ? (
-                      filteredWorkEntries.map((row) => (
-                        <tr key={row.id}>
-                          <td style={tdStyle}>{row.work_date}</td>
-                          <td style={tdStyle}>{row.emp_no}</td>
-                          <td style={tdStyle}>{row.name_en}</td>
-                          <td style={tdStyle}>{row.project_name}</td>
-                          <td style={tdStyle}>{row.regular_hours}</td>
-                          <td style={tdStyle}>{row.overtime_hours}</td>
-                          <td style={tdStyle}>{row.notes || "-"}</td>
-                          <td className="no-print" style={tdStyle}>
-                            <button type="button" onClick={() => deleteWorkEntry(row.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
+              <div className="print-area">
+                <div className="print-report-title">Work Entries</div>
+                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <div style={tableWrap}>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td style={emptyTd} colSpan="8">No work entries found</td>
+                        <th style={thStyle}>Date</th>
+                        <th style={thStyle}>Emp No</th>
+                        <th style={thStyle}>Employee</th>
+                        <th style={thStyle}>Project</th>
+                        <th style={thStyle}>Regular Hours</th>
+                        <th style={thStyle}>OT Hours</th>
+                        <th style={thStyle}>Notes</th>
+                        <th className="no-print" style={thStyle}>Action</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredWorkEntries.length > 0 ? (
+                        filteredWorkEntries.map((row) => (
+                          <tr key={row.id}>
+                            <td style={tdStyle}>{row.work_date}</td>
+                            <td style={tdStyle}>{row.emp_no}</td>
+                            <td style={tdStyle}>{row.name_en}</td>
+                            <td style={tdStyle}>{row.project_name}</td>
+                            <td style={tdStyle}>{row.regular_hours}</td>
+                            <td style={tdStyle}>{row.overtime_hours}</td>
+                            <td style={tdStyle}>{row.notes || "-"}</td>
+                            <td className="no-print" style={tdStyle}>
+                              <button type="button" onClick={() => deleteWorkEntry(row.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td style={emptyTd} colSpan="8">No work entries found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </>
@@ -1303,26 +1328,34 @@ export default function App() {
               <div className="print-area">
                 {selectedProjectId && groupedProjectEmployees.length > 0 ? (
                   <>
-                    <div className="print-project-title">{selectedProject?.project_name || "PROJECT EMPLOYEES"}</div>
+                    <div className="print-report-title">Employee Allocation Report</div>
+                    <div className="print-report-subtitle">
+                      Project: {selectedProject?.project_name || "-"}
+                      {selectedProject?.project_code ? ` | Code: ${selectedProject.project_code}` : ""}
+                    </div>
+
                     <div style={designationGroupsWrap}>
                       {groupedProjectEmployees.map((group) => (
                         <div key={group.designation} className="designation-group" style={designationGroupCard}>
                           <div style={designationHeader}>
-                            <div style={designationHeaderTitle} className="print-group-title">{group.designation.toUpperCase()} - {group.count}</div>
+                            <div style={designationHeaderTitle} className="print-group-title">
+                              {group.designation.toUpperCase()} - {group.count}
+                            </div>
                           </div>
+
                           <div style={tableWrap}>
                             <table style={groupTableStyle}>
                               <thead>
                                 <tr>
-                                  <th style={thStyleCenter}>SR.NO</th>
-                                  <th style={thStyle}>EMP.NO</th>
-                                  <th style={thStyle}>EMPLOYEE NAME</th>
-                                  <th style={thStyle}>EMPLOYEE NAME AR</th>
-                                  <th style={thStyle}>DESIGNATION</th>
-                                  <th style={thStyleCenter}>Shift</th>
-                                  <th style={thStyleCenter}>Project</th>
-                                  <th style={thStyleCenter}>CAMP NO</th>
-                                  <th style={thStyleCenter}>ROOM NO</th>
+                                  <th style={{ ...thStyleCenter, width: "6%" }}>SR.NO</th>
+                                  <th style={{ ...thStyle, width: "12%" }}>EMP.NO</th>
+                                  <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME</th>
+                                  <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME AR</th>
+                                  <th style={{ ...thStyle, width: "16%" }}>DESIGNATION</th>
+                                  <th style={{ ...thStyleCenter, width: "8%" }}>SHIFT</th>
+                                  <th style={{ ...thStyleCenter, width: "10%" }}>PROJECT</th>
+                                  <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
+                                  <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1377,35 +1410,39 @@ export default function App() {
               onPrint={printCurrentPage}
             />
 
-            <div style={tableWrap}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr>
-                    <th style={thStyle}>Date & Time</th>
-                    <th style={thStyle}>Entity Type</th>
-                    <th style={thStyle}>Entity ID</th>
-                    <th style={thStyle}>Action</th>
-                    <th style={thStyle}>Details</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLogs.length > 0 ? (
-                    filteredLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td style={tdStyle}>{log.created_at}</td>
-                        <td style={tdStyle}>{log.entity_type}</td>
-                        <td style={tdStyle}>{log.entity_id}</td>
-                        <td style={tdStyle}>{log.action}</td>
-                        <td style={tdStyle}>{log.details}</td>
-                      </tr>
-                    ))
-                  ) : (
+            <div className="print-area">
+              <div className="print-report-title">System Change Logs</div>
+              <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+              <div style={tableWrap}>
+                <table style={tableStyle}>
+                  <thead>
                     <tr>
-                      <td style={emptyTd} colSpan="5">No logs found</td>
+                      <th style={thStyle}>Date & Time</th>
+                      <th style={thStyle}>Entity Type</th>
+                      <th style={thStyle}>Entity ID</th>
+                      <th style={thStyle}>Action</th>
+                      <th style={thStyle}>Details</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredLogs.length > 0 ? (
+                      filteredLogs.map((log) => (
+                        <tr key={log.id}>
+                          <td style={tdStyle}>{log.created_at}</td>
+                          <td style={tdStyle}>{log.entity_type}</td>
+                          <td style={tdStyle}>{log.entity_id}</td>
+                          <td style={tdStyle}>{log.action}</td>
+                          <td style={tdStyle}>{log.details}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td style={emptyTd} colSpan="5">No logs found</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1485,20 +1522,115 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   .responsive-grid-4, .responsive-grid-3, .responsive-grid-2 { grid-template-columns: 1fr !important; }
 }
 @media print {
-  html, body { background: #ffffff !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body * { visibility: hidden; }
-  .print-area, .print-area * { visibility: visible; }
-  .print-area { position: absolute; left: 0; top: 0; width: 100%; background: #ffffff !important; color: #000000 !important; padding: 0 !important; margin: 0 !important; }
-  .no-print { display: none !important; }
-  .designation-group { break-inside: avoid; page-break-inside: avoid; margin-bottom: 14px !important; border: 1px solid #000 !important; border-radius: 0 !important; background: #fff !important; box-shadow: none !important; }
-  table { width: 100% !important; min-width: 100% !important; border-collapse: collapse !important; table-layout: fixed !important; font-size: 10px !important; }
-  thead { display: table-header-group; }
-  tr, td, th { page-break-inside: avoid; }
-  th, td { border: 1px solid #000 !important; padding: 6px 5px !important; color: #000 !important; background: #fff !important; word-wrap: break-word !important; overflow-wrap: break-word !important; vertical-align: middle !important; }
-  th { background: #000 !important; color: #fff !important; font-weight: 700 !important; }
-  h1, h2, h3, h4, h5, h6 { color: #000 !important; margin-top: 0 !important; margin-bottom: 8px !important; }
-  .print-project-title { text-align: center !important; font-size: 18px !important; font-weight: 800 !important; margin-bottom: 12px !important; text-transform: uppercase !important; }
-  .print-group-title { text-align: center !important; font-size: 13px !important; font-weight: 800 !important; text-decoration: underline !important; margin: 8px 0 6px 0 !important; color: #000 !important; }
+  html, body {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-area,
+  .print-area * {
+    visibility: visible !important;
+  }
+
+  .print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-report-title {
+    display: block !important;
+    text-align: center !important;
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    margin: 0 0 10px 0 !important;
+    color: #000 !important;
+    text-transform: uppercase !important;
+  }
+
+  .print-report-subtitle {
+    display: block !important;
+    text-align: center !important;
+    font-size: 11px !important;
+    margin: 0 0 14px 0 !important;
+    color: #333 !important;
+  }
+
+  .designation-group {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    margin-bottom: 12px !important;
+    border: 1px solid #000 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  table {
+    width: 100% !important;
+    min-width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: fixed !important;
+    font-size: 10px !important;
+    background: #fff !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  th, td {
+    border: 1px solid #000 !important;
+    padding: 5px 4px !important;
+    color: #000 !important;
+    background: #fff !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    vertical-align: middle !important;
+    line-height: 1.3 !important;
+  }
+
+  th {
+    background: #000 !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+  }
+
+  .print-group-title {
+    text-align: center !important;
+    font-size: 13px !important;
+    font-weight: 800 !important;
+    text-decoration: underline !important;
+    margin: 8px 0 6px 0 !important;
+    color: #000 !important;
+  }
 }
 `;
 
