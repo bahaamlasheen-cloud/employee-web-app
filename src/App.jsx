@@ -835,7 +835,7 @@ export default function App() {
               <div className="print-area">
                 <div className="print-report-title">Employee Hours Summary</div>
                 <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div style={tableWrap}>
+                <div className="print-table-wrap" style={tableWrap}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>
@@ -946,7 +946,7 @@ export default function App() {
                 <div style={subInfoText} className="no-print">
                   Showing <strong style={{ color: "#ffffff" }}>{filteredEmployees.length}</strong> record(s)
                 </div>
-                <div style={tableWrap}>
+                <div className="print-table-wrap" style={tableWrap}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>
@@ -1049,7 +1049,7 @@ export default function App() {
               <div className="print-area">
                 <div className="print-report-title">Projects List</div>
                 <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div style={tableWrap}>
+                <div className="print-table-wrap" style={tableWrap}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>
@@ -1147,7 +1147,7 @@ export default function App() {
               <div className="print-area">
                 <div className="print-report-title">Current Assignments</div>
                 <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div style={tableWrap}>
+                <div className="print-table-wrap" style={tableWrap}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>
@@ -1236,7 +1236,7 @@ export default function App() {
               <div className="print-area">
                 <div className="print-report-title">Work Entries</div>
                 <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div style={tableWrap}>
+                <div className="print-table-wrap" style={tableWrap}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>
@@ -1343,7 +1343,7 @@ export default function App() {
                             </div>
                           </div>
 
-                          <div style={tableWrap}>
+                          <div className="print-table-wrap" style={tableWrap}>
                             <table style={groupTableStyle}>
                               <thead>
                                 <tr>
@@ -1413,7 +1413,7 @@ export default function App() {
             <div className="print-area">
               <div className="print-report-title">System Change Logs</div>
               <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-              <div style={tableWrap}>
+              <div className="print-table-wrap" style={tableWrap}>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
@@ -1540,18 +1540,25 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   }
 
   .print-area {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 100% !important;
     background: #ffffff !important;
     color: #000000 !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
   }
 
   .no-print {
     display: none !important;
+  }
+
+  .print-table-wrap {
+    overflow: visible !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: 0 !important;
+    background: #fff !important;
   }
 
   .print-report-title {
