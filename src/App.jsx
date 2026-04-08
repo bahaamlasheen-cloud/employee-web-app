@@ -14,12 +14,53 @@ const TABLES = {
   logs: "logs"
 };
 
+const SECTION_OPTIONS = [
+  "Engineers",
+  "Operators",
+  "Foreman & Supervisors",
+  "Riggers",
+  "Helpers",
+  "Welders",
+  "Mechanic",
+  "Others"
+];
+
+function normalizeSection(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  const sectionMap = {
+    engineers: "Engineers",
+    engineer: "Engineers",
+    operators: "Operators",
+    operator: "Operators",
+    "foreman & supervisors": "Foreman & Supervisors",
+    "foreman and supervisors": "Foreman & Supervisors",
+    "foreman/supervisors": "Foreman & Supervisors",
+    foreman: "Foreman & Supervisors",
+    supervisors: "Foreman & Supervisors",
+    supervisor: "Foreman & Supervisors",
+    riggers: "Riggers",
+    rigger: "Riggers",
+    helpers: "Helpers",
+    helper: "Helpers",
+    welders: "Welders",
+    welder: "Welders",
+    mechanic: "Mechanic",
+    mechanics: "Mechanic",
+    others: "Others",
+    other: "Others"
+  };
+
+  return sectionMap[normalized] || "Others";
+}
+
 const emptyEmployee = {
   id: null,
   emp_no: "",
   name_en: "",
   name_ar: "",
   designation: "",
+  section: "Others",
   rig_no: "",
   shift: "",
   camp_no: "",
@@ -179,6 +220,7 @@ async function enrichData() {
     const project = assignment ? projectById.get(Number(assignment.project_id)) : null;
     return {
       ...emp,
+      section: normalizeSection(emp.section),
       current_project: project?.project_name || "",
       current_project_id: project?.id || null
     };
@@ -201,6 +243,7 @@ async function enrichData() {
         name_en: employee.name_en,
         name_ar: employee.name_ar,
         designation: employee.designation,
+        section: normalizeSection(employee.section),
         shift: employee.shift,
         rig_no: employee.rig_no,
         camp_no: employee.camp_no,
@@ -225,6 +268,7 @@ async function enrichData() {
         emp_no: employee.emp_no,
         name_en: employee.name_en,
         designation: employee.designation,
+        section: normalizeSection(employee.section),
         project_name: project.project_name
       };
     })
@@ -238,6 +282,7 @@ async function enrichData() {
       emp_no: emp.emp_no,
       name_en: emp.name_en,
       designation: emp.designation,
+      section: normalizeSection(emp.section),
       current_project: emp.current_project || "",
       total_regular_hours: 0,
       total_overtime_hours: 0,
@@ -360,6 +405,7 @@ export default function App() {
         name_en: a.name_en,
         name_ar: a.name_ar,
         designation: a.designation,
+        section: normalizeSection(a.section),
         shift: a.shift,
         camp_no: a.camp_no,
         room_no: a.room_no,
@@ -427,6 +473,7 @@ export default function App() {
           name_en: employeeForm.name_en,
           name_ar: employeeForm.name_ar,
           designation: employeeForm.designation,
+          section: normalizeSection(employeeForm.section),
           rig_no: employeeForm.rig_no,
           shift: employeeForm.shift,
           camp_no: employeeForm.camp_no,
@@ -444,6 +491,7 @@ export default function App() {
       } else {
         const row = {
           ...employeeForm,
+          section: normalizeSection(employeeForm.section),
           id: uid(),
           created_at: nowStamp(),
           updated_at: nowStamp()
@@ -471,6 +519,7 @@ export default function App() {
       name_en: emp.name_en || "",
       name_ar: emp.name_ar || "",
       designation: emp.designation || "",
+      section: normalizeSection(emp.section),
       rig_no: emp.rig_no || "",
       shift: emp.shift || "",
       camp_no: emp.camp_no || "",
@@ -783,6 +832,7 @@ export default function App() {
           name_en: String(row.name_en || row["Name EN"] || row["Employee Name EN"] || "").trim(),
           name_ar: String(row.name_ar || row["Name AR"] || row["Employee Name AR"] || "").trim(),
           designation: String(row.designation || row["Designation"] || "").trim(),
+          section: normalizeSection(row.section || row["Section"] || row["SECTION"] || "Others"),
           rig_no: String(row.rig_no || row["Rig No"] || "").trim(),
           shift: String(row.shift || row["Shift"] || "").trim(),
           camp_no: String(row.camp_no || row["Camp No"] || "").trim(),
@@ -860,7 +910,16 @@ export default function App() {
     const q = normalizeText(searchDashboard);
     if (!q) return hoursSummary;
     return hoursSummary.filter((row) =>
-      [row.emp_no, row.name_en, row.designation, row.current_project, row.total_regular_hours, row.total_overtime_hours, row.total_hours]
+      [
+        row.emp_no,
+        row.name_en,
+        row.designation,
+        row.section,
+        row.current_project,
+        row.total_regular_hours,
+        row.total_overtime_hours,
+        row.total_hours
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -871,7 +930,20 @@ export default function App() {
     const q = normalizeText(searchEmployee);
     if (!q) return employees;
     return employees.filter((e) =>
-      [e.emp_no, e.name_en, e.name_ar, e.designation, e.current_project, e.status, e.shift, e.rig_no, e.camp_no, e.room_no, e.notes]
+      [
+        e.emp_no,
+        e.name_en,
+        e.name_ar,
+        e.designation,
+        e.section,
+        e.current_project,
+        e.status,
+        e.shift,
+        e.rig_no,
+        e.camp_no,
+        e.room_no,
+        e.notes
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -890,7 +962,10 @@ export default function App() {
     const q = normalizeText(searchAssignment);
     if (!q) return assignments;
     return assignments.filter((a) =>
-      [a.emp_no, a.name_en, a.designation, a.project_name, a.project_code, a.shift, a.rig_no, a.notes].join(" ").toLowerCase().includes(q)
+      [a.emp_no, a.name_en, a.designation, a.section, a.project_name, a.project_code, a.shift, a.rig_no, a.notes]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [assignments, searchAssignment]);
 
@@ -898,7 +973,10 @@ export default function App() {
     const q = normalizeText(searchHours);
     if (!q) return workEntries;
     return workEntries.filter((w) =>
-      [w.emp_no, w.name_en, w.project_name, w.work_date, w.notes, w.regular_hours, w.overtime_hours].join(" ").toLowerCase().includes(q)
+      [w.emp_no, w.name_en, w.designation, w.section, w.project_name, w.work_date, w.notes, w.regular_hours, w.overtime_hours]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [workEntries, searchHours]);
 
@@ -918,7 +996,18 @@ export default function App() {
     const q = normalizeText(searchProjectView);
     if (!q) return selectedProjectEmployees;
     return selectedProjectEmployees.filter((emp) =>
-      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.shift, emp.camp_no, emp.room_no, emp.rig_no, emp.status]
+      [
+        emp.emp_no,
+        emp.name_en,
+        emp.name_ar,
+        emp.designation,
+        emp.section,
+        emp.shift,
+        emp.camp_no,
+        emp.room_no,
+        emp.rig_no,
+        emp.status
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -926,29 +1015,35 @@ export default function App() {
   }, [selectedProjectEmployees, searchProjectView]);
 
   const groupedProjectEmployees = useMemo(() => {
-    if (!projectViewFilteredEmployees.length) return [];
     const map = new Map();
-
-    projectViewFilteredEmployees.forEach((emp) => {
-      const designation = (emp.designation || "Uncategorized").trim() || "Uncategorized";
-      if (!map.has(designation)) map.set(designation, []);
-      map.get(designation).push(emp);
+    SECTION_OPTIONS.forEach((section) => {
+      map.set(section, []);
     });
 
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([designation, items]) => ({
-        designation,
-        count: items.length,
-        items: [...items].sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")))
-      }));
+    projectViewFilteredEmployees.forEach((emp) => {
+      const section = normalizeSection(emp.section);
+      if (!map.has(section)) {
+        map.set(section, []);
+      }
+      map.get(section).push(emp);
+    });
+
+    return SECTION_OPTIONS.map((section) => ({
+      section,
+      count: map.get(section)?.length || 0,
+      items: [...(map.get(section) || [])].sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || ""))
+      )
+    }));
   }, [projectViewFilteredEmployees]);
 
   const filteredAdminEmployees = useMemo(() => {
     const q = normalizeText(searchAdminEmployees);
     if (!q) return employees;
     return employees.filter((emp) =>
-      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.current_project, emp.shift, emp.rig_no, emp.status].join(" ").toLowerCase().includes(q)
+      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.section, emp.current_project, emp.shift, emp.rig_no, emp.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [employees, searchAdminEmployees]);
 
@@ -1091,6 +1186,7 @@ export default function App() {
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
                       Designation: row.designation,
+                      Section: row.section,
                       "Current Project": row.current_project,
                       "Regular Hours": row.total_regular_hours,
                       "OT Hours": row.total_overtime_hours,
@@ -1114,6 +1210,7 @@ export default function App() {
                           <th style={thStyle}>Emp No</th>
                           <th style={thStyle}>Employee</th>
                           <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Current Project</th>
                           <th style={thStyle}>Regular Hours</th>
                           <th style={thStyle}>OT Hours</th>
@@ -1127,6 +1224,7 @@ export default function App() {
                               <td style={tdStyle}>{row.emp_no}</td>
                               <td style={tdStyle}>{row.name_en}</td>
                               <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.current_project || "-"}</td>
                               <td style={tdStyle}>{row.total_regular_hours}</td>
                               <td style={tdStyle}>{row.total_overtime_hours}</td>
@@ -1135,7 +1233,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="7">No data found</td>
+                            <td style={emptyTd} colSpan="8">No data found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1167,6 +1265,15 @@ export default function App() {
                 <input type="text" autoComplete="off" name="name_en" placeholder="Employee Name EN *" value={employeeForm.name_en} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="name_ar" placeholder="Employee Name AR" value={employeeForm.name_ar} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="designation" placeholder="Designation *" value={employeeForm.designation} onChange={handleEmployeeChange} style={inputStyle} />
+
+                <select name="section" value={employeeForm.section} onChange={handleEmployeeChange} style={inputStyle}>
+                  {SECTION_OPTIONS.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
+
                 <input type="text" autoComplete="off" name="rig_no" placeholder="Rig No" value={employeeForm.rig_no} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="shift" placeholder="Shift" value={employeeForm.shift} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="camp_no" placeholder="Camp No" value={employeeForm.camp_no} onChange={handleEmployeeChange} style={inputStyle} />
@@ -1200,6 +1307,7 @@ export default function App() {
                       "Name EN": emp.name_en,
                       "Name AR": emp.name_ar,
                       Designation: emp.designation,
+                      Section: emp.section,
                       "Rig No": emp.rig_no,
                       Shift: emp.shift,
                       "Current Project": emp.current_project || "",
@@ -1228,6 +1336,7 @@ export default function App() {
                           <th style={thStyle}>Name EN</th>
                           <th style={thStyle}>Name AR</th>
                           <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Rig</th>
                           <th style={thStyle}>Shift</th>
                           <th style={thStyle}>Current Project</th>
@@ -1243,6 +1352,7 @@ export default function App() {
                               <td style={tdStyle}>{emp.name_en}</td>
                               <td style={tdStyle}>{emp.name_ar}</td>
                               <td style={tdStyle}>{emp.designation}</td>
+                              <td style={tdStyle}>{emp.section}</td>
                               <td style={tdStyle}>{emp.rig_no}</td>
                               <td style={tdStyle}>{emp.shift}</td>
                               <td style={tdStyle}>{emp.current_project || "-"}</td>
@@ -1257,7 +1367,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="9">No employees found</td>
+                            <td style={emptyTd} colSpan="10">No employees found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1378,7 +1488,8 @@ export default function App() {
                   <option value="">Select Employee</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
-                      {emp.emp_no} - {emp.name_en}{emp.current_project ? ` | Current: ${emp.current_project}` : " | Unassigned"}
+                      {emp.emp_no} - {emp.name_en} | {emp.section}
+                      {emp.current_project ? ` | Current: ${emp.current_project}` : " | Unassigned"}
                     </option>
                   ))}
                 </select>
@@ -1409,6 +1520,7 @@ export default function App() {
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
                       Designation: row.designation,
+                      Section: row.section,
                       Project: row.project_name,
                       "Project Code": row.project_code || "",
                       "Assigned At": row.assigned_at,
@@ -1432,6 +1544,7 @@ export default function App() {
                           <th style={thStyle}>Emp No</th>
                           <th style={thStyle}>Employee</th>
                           <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Project</th>
                           <th style={thStyle}>Assigned At</th>
                           <th style={thStyle}>Notes</th>
@@ -1445,6 +1558,7 @@ export default function App() {
                               <td style={tdStyle}>{row.emp_no}</td>
                               <td style={tdStyle}>{row.name_en}</td>
                               <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.project_name}</td>
                               <td style={tdStyle}>{row.assigned_at}</td>
                               <td style={tdStyle}>{row.notes || "-"}</td>
@@ -1455,7 +1569,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="7">No assignments found</td>
+                            <td style={emptyTd} colSpan="8">No assignments found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1475,7 +1589,9 @@ export default function App() {
                 <select name="employee_id" value={workEntryForm.employee_id} onChange={handleWorkEntryChange} style={inputStyle}>
                   <option value="">Select Employee</option>
                   {employees.filter((e) => e.current_project).map((emp) => (
-                    <option key={emp.id} value={emp.id}>{emp.emp_no} - {emp.name_en} | {emp.current_project}</option>
+                    <option key={emp.id} value={emp.id}>
+                      {emp.emp_no} - {emp.name_en} | {emp.section} | {emp.current_project}
+                    </option>
                   ))}
                 </select>
                 <input type="date" name="work_date" value={workEntryForm.work_date} onChange={handleWorkEntryChange} style={inputStyle} />
@@ -1500,6 +1616,8 @@ export default function App() {
                       Date: row.work_date,
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
+                      Designation: row.designation,
+                      Section: row.section,
                       Project: row.project_name,
                       "Regular Hours": row.regular_hours,
                       "OT Hours": row.overtime_hours,
@@ -1523,6 +1641,8 @@ export default function App() {
                           <th style={thStyle}>Date</th>
                           <th style={thStyle}>Emp No</th>
                           <th style={thStyle}>Employee</th>
+                          <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Project</th>
                           <th style={thStyle}>Regular Hours</th>
                           <th style={thStyle}>OT Hours</th>
@@ -1537,6 +1657,8 @@ export default function App() {
                               <td style={tdStyle}>{row.work_date}</td>
                               <td style={tdStyle}>{row.emp_no}</td>
                               <td style={tdStyle}>{row.name_en}</td>
+                              <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.project_name}</td>
                               <td style={tdStyle}>{row.regular_hours}</td>
                               <td style={tdStyle}>{row.overtime_hours}</td>
@@ -1548,7 +1670,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="8">No work entries found</td>
+                            <td style={emptyTd} colSpan="10">No work entries found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1592,7 +1714,8 @@ export default function App() {
                   exportRowsToExcel(
                     groupedProjectEmployees.flatMap((group) =>
                       group.items.map((row, index) => ({
-                        Group: index === 0 ? `${group.designation} - ${group.count}` : "",
+                        Group: index === 0 ? `${group.section} - ${group.count}` : "",
+                        Section: row.section,
                         "Emp No": row.emp_no,
                         Employee: row.name_en,
                         "Employee Name AR": row.name_ar || "",
@@ -1604,7 +1727,7 @@ export default function App() {
                         "Rig No": row.rig_no || "",
                         Status: row.status || "",
                         "Assigned At": row.assigned_at || "",
-                        Notes: row.notes || ""
+                        Notes: row.assignment_notes || ""
                       }))
                     ),
                     "Project Employees",
@@ -1616,7 +1739,7 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  {selectedProjectId && groupedProjectEmployees.length > 0 ? (
+                  {selectedProjectId ? (
                     <>
                       <div className="print-report-title">Employee Allocation Report</div>
                       <div className="print-report-subtitle">
@@ -1626,10 +1749,10 @@ export default function App() {
 
                       <div style={designationGroupsWrap}>
                         {groupedProjectEmployees.map((group) => (
-                          <div key={group.designation} className="designation-group" style={designationGroupCard}>
+                          <div key={group.section} className="designation-group" style={designationGroupCard}>
                             <div style={designationHeader}>
                               <div style={designationHeaderTitle} className="print-group-title">
-                                {group.designation.toUpperCase()} - {group.count}
+                                {group.section.toUpperCase()} - {group.count}
                               </div>
                             </div>
 
@@ -1642,6 +1765,7 @@ export default function App() {
                                     <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME</th>
                                     <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME AR</th>
                                     <th style={{ ...thStyle, width: "16%" }}>DESIGNATION</th>
+                                    <th style={{ ...thStyle, width: "14%" }}>SECTION</th>
                                     <th style={{ ...thStyleCenter, width: "8%" }}>SHIFT</th>
                                     <th style={{ ...thStyleCenter, width: "10%" }}>PROJECT</th>
                                     <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
@@ -1649,19 +1773,26 @@ export default function App() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {group.items.map((row, index) => (
-                                    <tr key={row.id}>
-                                      <td style={tdStyleCenter}>{index + 1}</td>
-                                      <td style={tdStyle}>{row.emp_no}</td>
-                                      <td style={tdStyle}>{row.name_en}</td>
-                                      <td style={{ ...tdStyle, direction: "rtl", textAlign: "right" }}>{row.name_ar || "-"}</td>
-                                      <td style={tdStyle}>{row.designation || "-"}</td>
-                                      <td style={tdStyleCenter}>{row.shift || "N/A"}</td>
-                                      <td style={tdStyleCenter}>{selectedProject?.project_code || selectedProject?.project_name || "-"}</td>
-                                      <td style={tdStyleCenter}>{row.camp_no || "N/A"}</td>
-                                      <td style={tdStyleCenter}>{row.room_no || "N/A"}</td>
+                                  {group.items.length > 0 ? (
+                                    group.items.map((row, index) => (
+                                      <tr key={row.id}>
+                                        <td style={tdStyleCenter}>{index + 1}</td>
+                                        <td style={tdStyle}>{row.emp_no}</td>
+                                        <td style={tdStyle}>{row.name_en}</td>
+                                        <td style={{ ...tdStyle, direction: "rtl", textAlign: "right" }}>{row.name_ar || "-"}</td>
+                                        <td style={tdStyle}>{row.designation || "-"}</td>
+                                        <td style={tdStyle}>{row.section || "-"}</td>
+                                        <td style={tdStyleCenter}>{row.shift || "N/A"}</td>
+                                        <td style={tdStyleCenter}>{selectedProject?.project_code || selectedProject?.project_name || "-"}</td>
+                                        <td style={tdStyleCenter}>{row.camp_no || "N/A"}</td>
+                                        <td style={tdStyleCenter}>{row.room_no || "N/A"}</td>
+                                      </tr>
+                                    ))
+                                  ) : (
+                                    <tr>
+                                      <td style={emptyTd} colSpan="10">No employees in this section</td>
                                     </tr>
-                                  ))}
+                                  )}
                                 </tbody>
                               </table>
                             </div>
@@ -1670,7 +1801,7 @@ export default function App() {
                       </div>
                     </>
                   ) : (
-                    <div style={emptyGroupBox}>{selectedProjectId ? "No employees found for this project" : "Select a project first"}</div>
+                    <div style={emptyGroupBox}>Select a project first</div>
                   )}
                 </div>
               </div>
@@ -1882,6 +2013,7 @@ function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd, onEdit
       </div>
       <div style={employeeCardBadgeRow}>
         <span style={employeeBadge}>{employee.designation || "No Designation"}</span>
+        <span style={employeeBadge}>{employee.section || "Others"}</span>
         <span style={employeeBadgeMuted}>{employee.shift || "No Shift"}</span>
       </div>
       <div style={employeeCardInfo}>Rig: {employee.rig_no || "-"}</div>
