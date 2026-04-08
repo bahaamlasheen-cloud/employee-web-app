@@ -14,12 +14,24 @@ const TABLES = {
   logs: "logs"
 };
 
+const SECTION_OPTIONS = [
+  "Engineers",
+  "Operators",
+  "Foreman & Supervisors",
+  "Riggers",
+  "Helpers",
+  "Welders",
+  "Mechanic",
+  "Others"
+];
+
 const emptyEmployee = {
   id: null,
   emp_no: "",
   name_en: "",
   name_ar: "",
   designation: "",
+  section: "Others",
   rig_no: "",
   shift: "",
   camp_no: "",
@@ -66,6 +78,24 @@ function uid() {
   return Date.now() + Math.floor(Math.random() * 100000);
 }
 
+function normalizeSection(value) {
+  const text = String(value || "").trim().toLowerCase();
+
+  if (!text) return "Others";
+  if (text === "engineers" || text === "engineer") return "Engineers";
+  if (text === "operators" || text === "operator") return "Operators";
+  if (text === "foreman & supervisors" || text === "foreman and supervisors" || text === "foreman" || text === "supervisors" || text === "supervisor") {
+    return "Foreman & Supervisors";
+  }
+  if (text === "riggers" || text === "rigger") return "Riggers";
+  if (text === "helpers" || text === "helper") return "Helpers";
+  if (text === "welders" || text === "welder") return "Welders";
+  if (text === "mechanic" || text === "mechanics") return "Mechanic";
+
+  const exact = SECTION_OPTIONS.find((item) => item.toLowerCase() === text);
+  return exact || "Others";
+}
+
 function exportRowsToExcel(rows, sheetName, fileName) {
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
@@ -73,8 +103,16 @@ function exportRowsToExcel(rows, sheetName, fileName) {
   XLSX.writeFile(workbook, `${fileName || "export"}.xlsx`);
 }
 
-function normalizeText(value) {
-  return String(value || "").trim().toLowerCase();
+function downloadBlobJson(payload, filename) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: "application/json"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function fetchRows(table, orderBy = "id", ascending = false) {
@@ -145,16 +183,7 @@ async function downloadJsonBackup() {
     logs
   };
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json"
-  });
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `employee-system-backup-${nowStamp().replace(/[: ]/g, "-")}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadBlobJson(payload, `employee-system-backup-${nowStamp().replace(/[: ]/g, "-")}.json`);
 }
 
 async function getEmployeeAssignment(employeeId) {
@@ -172,13 +201,22 @@ async function enrichData() {
 
   const assignmentByEmployeeId = new Map(assignmentsRaw.map((a) => [Number(a.employee_id), a]));
   const projectById = new Map(projectsRaw.map((p) => [Number(p.id), p]));
-  const employeeById = new Map(employeesRaw.map((e) => [Number(e.id), e]));
+  const employeeById = new Map(
+    employeesRaw.map((e) => [
+      Number(e.id),
+      {
+        ...e,
+        section: normalizeSection(e.section)
+      }
+    ])
+  );
 
   const employees = employeesRaw.map((emp) => {
     const assignment = assignmentByEmployeeId.get(Number(emp.id));
     const project = assignment ? projectById.get(Number(assignment.project_id)) : null;
     return {
       ...emp,
+      section: normalizeSection(emp.section),
       current_project: project?.project_name || "",
       current_project_id: project?.id || null
     };
@@ -201,6 +239,7 @@ async function enrichData() {
         name_en: employee.name_en,
         name_ar: employee.name_ar,
         designation: employee.designation,
+        section: normalizeSection(employee.section),
         shift: employee.shift,
         rig_no: employee.rig_no,
         camp_no: employee.camp_no,
@@ -225,6 +264,7 @@ async function enrichData() {
         emp_no: employee.emp_no,
         name_en: employee.name_en,
         designation: employee.designation,
+        section: normalizeSection(employee.section),
         project_name: project.project_name
       };
     })
@@ -238,6 +278,7 @@ async function enrichData() {
       emp_no: emp.emp_no,
       name_en: emp.name_en,
       designation: emp.designation,
+      section: normalizeSection(emp.section),
       current_project: emp.current_project || "",
       total_regular_hours: 0,
       total_overtime_hours: 0,
@@ -360,6 +401,7 @@ export default function App() {
         name_en: a.name_en,
         name_ar: a.name_ar,
         designation: a.designation,
+        section: normalizeSection(a.section),
         shift: a.shift,
         camp_no: a.camp_no,
         room_no: a.room_no,
@@ -374,7 +416,10 @@ export default function App() {
 
   const handleEmployeeChange = (e) => {
     const { name, value } = e.target;
-    setEmployeeForm((prev) => ({ ...prev, [name]: value }));
+    setEmployeeForm((prev) => ({
+      ...prev,
+      [name]: name === "section" ? normalizeSection(value) : value
+    }));
   };
 
   const handleProjectChange = (e) => {
@@ -421,29 +466,36 @@ export default function App() {
         return;
       }
 
-      if (isEditingEmployee) {
-        const payload = {
-          emp_no: employeeForm.emp_no,
-          name_en: employeeForm.name_en,
-          name_ar: employeeForm.name_ar,
-          designation: employeeForm.designation,
-          rig_no: employeeForm.rig_no,
-          shift: employeeForm.shift,
-          camp_no: employeeForm.camp_no,
-          room_no: employeeForm.room_no,
-          status: employeeForm.status,
-          notes: employeeForm.notes,
-          updated_at: nowStamp()
-        };
+      const employeePayload = {
+        emp_no: employeeForm.emp_no,
+        name_en: employeeForm.name_en,
+        name_ar: employeeForm.name_ar,
+        designation: employeeForm.designation,
+        section: normalizeSection(employeeForm.section),
+        rig_no: employeeForm.rig_no,
+        shift: employeeForm.shift,
+        camp_no: employeeForm.camp_no,
+        room_no: employeeForm.room_no,
+        status: employeeForm.status,
+        notes: employeeForm.notes
+      };
 
-        const { error } = await supabase.from(TABLES.employees).update(payload).eq("id", employeeForm.id);
+      if (isEditingEmployee) {
+        const { error } = await supabase
+          .from(TABLES.employees)
+          .update({
+            ...employeePayload,
+            updated_at: nowStamp()
+          })
+          .eq("id", employeeForm.id);
+
         if (error) throw error;
 
         await logChange("employee", employeeForm.id, "UPDATE", `Updated employee ${employeeForm.emp_no} - ${employeeForm.name_en}`);
         alert("Employee updated successfully.");
       } else {
         const row = {
-          ...employeeForm,
+          ...employeePayload,
           id: uid(),
           created_at: nowStamp(),
           updated_at: nowStamp()
@@ -471,6 +523,7 @@ export default function App() {
       name_en: emp.name_en || "",
       name_ar: emp.name_ar || "",
       designation: emp.designation || "",
+      section: normalizeSection(emp.section),
       rig_no: emp.rig_no || "",
       shift: emp.shift || "",
       camp_no: emp.camp_no || "",
@@ -783,6 +836,7 @@ export default function App() {
           name_en: String(row.name_en || row["Name EN"] || row["Employee Name EN"] || "").trim(),
           name_ar: String(row.name_ar || row["Name AR"] || row["Employee Name AR"] || "").trim(),
           designation: String(row.designation || row["Designation"] || "").trim(),
+          section: normalizeSection(row.section || row["Section"] || row["SECTION"] || "Others"),
           rig_no: String(row.rig_no || row["Rig No"] || "").trim(),
           shift: String(row.shift || row["Shift"] || "").trim(),
           camp_no: String(row.camp_no || row["Camp No"] || "").trim(),
@@ -860,7 +914,16 @@ export default function App() {
     const q = normalizeText(searchDashboard);
     if (!q) return hoursSummary;
     return hoursSummary.filter((row) =>
-      [row.emp_no, row.name_en, row.designation, row.current_project, row.total_regular_hours, row.total_overtime_hours, row.total_hours]
+      [
+        row.emp_no,
+        row.name_en,
+        row.designation,
+        row.section,
+        row.current_project,
+        row.total_regular_hours,
+        row.total_overtime_hours,
+        row.total_hours
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -871,7 +934,20 @@ export default function App() {
     const q = normalizeText(searchEmployee);
     if (!q) return employees;
     return employees.filter((e) =>
-      [e.emp_no, e.name_en, e.name_ar, e.designation, e.current_project, e.status, e.shift, e.rig_no, e.camp_no, e.room_no, e.notes]
+      [
+        e.emp_no,
+        e.name_en,
+        e.name_ar,
+        e.designation,
+        e.section,
+        e.current_project,
+        e.status,
+        e.shift,
+        e.rig_no,
+        e.camp_no,
+        e.room_no,
+        e.notes
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -890,7 +966,10 @@ export default function App() {
     const q = normalizeText(searchAssignment);
     if (!q) return assignments;
     return assignments.filter((a) =>
-      [a.emp_no, a.name_en, a.designation, a.project_name, a.project_code, a.shift, a.rig_no, a.notes].join(" ").toLowerCase().includes(q)
+      [a.emp_no, a.name_en, a.designation, a.section, a.project_name, a.project_code, a.shift, a.rig_no, a.notes]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [assignments, searchAssignment]);
 
@@ -898,7 +977,10 @@ export default function App() {
     const q = normalizeText(searchHours);
     if (!q) return workEntries;
     return workEntries.filter((w) =>
-      [w.emp_no, w.name_en, w.project_name, w.work_date, w.notes, w.regular_hours, w.overtime_hours].join(" ").toLowerCase().includes(q)
+      [w.emp_no, w.name_en, w.designation, w.section, w.project_name, w.work_date, w.notes, w.regular_hours, w.overtime_hours]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [workEntries, searchHours]);
 
@@ -918,7 +1000,7 @@ export default function App() {
     const q = normalizeText(searchProjectView);
     if (!q) return selectedProjectEmployees;
     return selectedProjectEmployees.filter((emp) =>
-      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.shift, emp.camp_no, emp.room_no, emp.rig_no, emp.status]
+      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.section, emp.shift, emp.camp_no, emp.room_no, emp.rig_no, emp.status]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -926,29 +1008,36 @@ export default function App() {
   }, [selectedProjectEmployees, searchProjectView]);
 
   const groupedProjectEmployees = useMemo(() => {
-    if (!projectViewFilteredEmployees.length) return [];
-    const map = new Map();
+    const groups = SECTION_OPTIONS.map((section) => ({
+      section,
+      count: 0,
+      items: []
+    }));
 
     projectViewFilteredEmployees.forEach((emp) => {
-      const designation = (emp.designation || "Uncategorized").trim() || "Uncategorized";
-      if (!map.has(designation)) map.set(designation, []);
-      map.get(designation).push(emp);
+      const section = normalizeSection(emp.section);
+      const index = SECTION_OPTIONS.findIndex((s) => s === section);
+      const targetIndex = index >= 0 ? index : SECTION_OPTIONS.findIndex((s) => s === "Others");
+
+      groups[targetIndex].items.push(emp);
+      groups[targetIndex].count += 1;
     });
 
-    return Array.from(map.entries())
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([designation, items]) => ({
-        designation,
-        count: items.length,
-        items: [...items].sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")))
-      }));
+    groups.forEach((group) => {
+      group.items.sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")));
+    });
+
+    return groups;
   }, [projectViewFilteredEmployees]);
 
   const filteredAdminEmployees = useMemo(() => {
     const q = normalizeText(searchAdminEmployees);
     if (!q) return employees;
     return employees.filter((emp) =>
-      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.current_project, emp.shift, emp.rig_no, emp.status].join(" ").toLowerCase().includes(q)
+      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.section, emp.current_project, emp.shift, emp.rig_no, emp.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [employees, searchAdminEmployees]);
 
@@ -1091,6 +1180,7 @@ export default function App() {
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
                       Designation: row.designation,
+                      Section: row.section,
                       "Current Project": row.current_project,
                       "Regular Hours": row.total_regular_hours,
                       "OT Hours": row.total_overtime_hours,
@@ -1114,6 +1204,7 @@ export default function App() {
                           <th style={thStyle}>Emp No</th>
                           <th style={thStyle}>Employee</th>
                           <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Current Project</th>
                           <th style={thStyle}>Regular Hours</th>
                           <th style={thStyle}>OT Hours</th>
@@ -1127,6 +1218,7 @@ export default function App() {
                               <td style={tdStyle}>{row.emp_no}</td>
                               <td style={tdStyle}>{row.name_en}</td>
                               <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.current_project || "-"}</td>
                               <td style={tdStyle}>{row.total_regular_hours}</td>
                               <td style={tdStyle}>{row.total_overtime_hours}</td>
@@ -1135,7 +1227,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="7">No data found</td>
+                            <td style={emptyTd} colSpan="8">No data found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1167,12 +1259,21 @@ export default function App() {
                 <input type="text" autoComplete="off" name="name_en" placeholder="Employee Name EN *" value={employeeForm.name_en} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="name_ar" placeholder="Employee Name AR" value={employeeForm.name_ar} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="designation" placeholder="Designation *" value={employeeForm.designation} onChange={handleEmployeeChange} style={inputStyle} />
+
+                <select name="section" value={employeeForm.section} onChange={handleEmployeeChange} style={inputStyle}>
+                  {SECTION_OPTIONS.map((section) => (
+                    <option key={section} value={section}>
+                      {section}
+                    </option>
+                  ))}
+                </select>
+
                 <input type="text" autoComplete="off" name="rig_no" placeholder="Rig No" value={employeeForm.rig_no} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="shift" placeholder="Shift" value={employeeForm.shift} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="camp_no" placeholder="Camp No" value={employeeForm.camp_no} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="room_no" placeholder="Room No" value={employeeForm.room_no} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="status" placeholder="Status" value={employeeForm.status} onChange={handleEmployeeChange} style={inputStyle} />
-                <input type="text" autoComplete="off" name="notes" placeholder="Notes" value={employeeForm.notes} onChange={handleEmployeeChange} style={{ ...inputStyle, gridColumn: "span 3" }} />
+                <input type="text" autoComplete="off" name="notes" placeholder="Notes" value={employeeForm.notes} onChange={handleEmployeeChange} style={{ ...inputStyle, gridColumn: "span 2" }} />
               </div>
 
               <div style={actionRow}>
@@ -1200,6 +1301,7 @@ export default function App() {
                       "Name EN": emp.name_en,
                       "Name AR": emp.name_ar,
                       Designation: emp.designation,
+                      Section: emp.section,
                       "Rig No": emp.rig_no,
                       Shift: emp.shift,
                       "Current Project": emp.current_project || "",
@@ -1228,6 +1330,7 @@ export default function App() {
                           <th style={thStyle}>Name EN</th>
                           <th style={thStyle}>Name AR</th>
                           <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Rig</th>
                           <th style={thStyle}>Shift</th>
                           <th style={thStyle}>Current Project</th>
@@ -1243,6 +1346,7 @@ export default function App() {
                               <td style={tdStyle}>{emp.name_en}</td>
                               <td style={tdStyle}>{emp.name_ar}</td>
                               <td style={tdStyle}>{emp.designation}</td>
+                              <td style={tdStyle}>{emp.section}</td>
                               <td style={tdStyle}>{emp.rig_no}</td>
                               <td style={tdStyle}>{emp.shift}</td>
                               <td style={tdStyle}>{emp.current_project || "-"}</td>
@@ -1257,7 +1361,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="9">No employees found</td>
+                            <td style={emptyTd} colSpan="10">No employees found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1409,6 +1513,7 @@ export default function App() {
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
                       Designation: row.designation,
+                      Section: row.section,
                       Project: row.project_name,
                       "Project Code": row.project_code || "",
                       "Assigned At": row.assigned_at,
@@ -1432,6 +1537,7 @@ export default function App() {
                           <th style={thStyle}>Emp No</th>
                           <th style={thStyle}>Employee</th>
                           <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Project</th>
                           <th style={thStyle}>Assigned At</th>
                           <th style={thStyle}>Notes</th>
@@ -1445,6 +1551,7 @@ export default function App() {
                               <td style={tdStyle}>{row.emp_no}</td>
                               <td style={tdStyle}>{row.name_en}</td>
                               <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.project_name}</td>
                               <td style={tdStyle}>{row.assigned_at}</td>
                               <td style={tdStyle}>{row.notes || "-"}</td>
@@ -1455,7 +1562,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="7">No assignments found</td>
+                            <td style={emptyTd} colSpan="8">No assignments found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1500,6 +1607,8 @@ export default function App() {
                       Date: row.work_date,
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
+                      Designation: row.designation,
+                      Section: row.section,
                       Project: row.project_name,
                       "Regular Hours": row.regular_hours,
                       "OT Hours": row.overtime_hours,
@@ -1523,6 +1632,8 @@ export default function App() {
                           <th style={thStyle}>Date</th>
                           <th style={thStyle}>Emp No</th>
                           <th style={thStyle}>Employee</th>
+                          <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Section</th>
                           <th style={thStyle}>Project</th>
                           <th style={thStyle}>Regular Hours</th>
                           <th style={thStyle}>OT Hours</th>
@@ -1537,6 +1648,8 @@ export default function App() {
                               <td style={tdStyle}>{row.work_date}</td>
                               <td style={tdStyle}>{row.emp_no}</td>
                               <td style={tdStyle}>{row.name_en}</td>
+                              <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.project_name}</td>
                               <td style={tdStyle}>{row.regular_hours}</td>
                               <td style={tdStyle}>{row.overtime_hours}</td>
@@ -1548,7 +1661,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="8">No work entries found</td>
+                            <td style={emptyTd} colSpan="10">No work entries found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1591,21 +1704,41 @@ export default function App() {
                 onExportExcel={() =>
                   exportRowsToExcel(
                     groupedProjectEmployees.flatMap((group) =>
-                      group.items.map((row, index) => ({
-                        Group: index === 0 ? `${group.designation} - ${group.count}` : "",
-                        "Emp No": row.emp_no,
-                        Employee: row.name_en,
-                        "Employee Name AR": row.name_ar || "",
-                        Designation: row.designation,
-                        Shift: row.shift || "",
-                        Project: selectedProject?.project_name || "",
-                        "Camp No": row.camp_no || "",
-                        "Room No": row.room_no || "",
-                        "Rig No": row.rig_no || "",
-                        Status: row.status || "",
-                        "Assigned At": row.assigned_at || "",
-                        Notes: row.notes || ""
-                      }))
+                      group.items.length > 0
+                        ? group.items.map((row, index) => ({
+                            Group: index === 0 ? `${group.section} - ${group.count}` : "",
+                            "Emp No": row.emp_no,
+                            Employee: row.name_en,
+                            "Employee Name AR": row.name_ar || "",
+                            Designation: row.designation,
+                            Section: row.section,
+                            Shift: row.shift || "",
+                            Project: selectedProject?.project_name || "",
+                            "Camp No": row.camp_no || "",
+                            "Room No": row.room_no || "",
+                            "Rig No": row.rig_no || "",
+                            Status: row.status || "",
+                            "Assigned At": row.assigned_at || "",
+                            Notes: row.assignment_notes || ""
+                          }))
+                        : [
+                            {
+                              Group: `${group.section} - 0`,
+                              "Emp No": "",
+                              Employee: "",
+                              "Employee Name AR": "",
+                              Designation: "",
+                              Section: group.section,
+                              Shift: "",
+                              Project: selectedProject?.project_name || "",
+                              "Camp No": "",
+                              "Room No": "",
+                              "Rig No": "",
+                              Status: "",
+                              "Assigned At": "",
+                              Notes: ""
+                            }
+                          ]
                     ),
                     "Project Employees",
                     "project_employees_grouped"
@@ -1616,7 +1749,7 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  {selectedProjectId && groupedProjectEmployees.length > 0 ? (
+                  {selectedProjectId ? (
                     <>
                       <div className="print-report-title">Employee Allocation Report</div>
                       <div className="print-report-subtitle">
@@ -1626,10 +1759,10 @@ export default function App() {
 
                       <div style={designationGroupsWrap}>
                         {groupedProjectEmployees.map((group) => (
-                          <div key={group.designation} className="designation-group" style={designationGroupCard}>
+                          <div key={group.section} className="designation-group" style={designationGroupCard}>
                             <div style={designationHeader}>
                               <div style={designationHeaderTitle} className="print-group-title">
-                                {group.designation.toUpperCase()} - {group.count}
+                                {group.section} - {group.count}
                               </div>
                             </div>
 
@@ -1642,26 +1775,34 @@ export default function App() {
                                     <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME</th>
                                     <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME AR</th>
                                     <th style={{ ...thStyle, width: "16%" }}>DESIGNATION</th>
+                                    <th style={{ ...thStyleCenter, width: "10%" }}>SECTION</th>
                                     <th style={{ ...thStyleCenter, width: "8%" }}>SHIFT</th>
-                                    <th style={{ ...thStyleCenter, width: "10%" }}>PROJECT</th>
                                     <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
                                     <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {group.items.map((row, index) => (
-                                    <tr key={row.id}>
-                                      <td style={tdStyleCenter}>{index + 1}</td>
-                                      <td style={tdStyle}>{row.emp_no}</td>
-                                      <td style={tdStyle}>{row.name_en}</td>
-                                      <td style={{ ...tdStyle, direction: "rtl", textAlign: "right" }}>{row.name_ar || "-"}</td>
-                                      <td style={tdStyle}>{row.designation || "-"}</td>
-                                      <td style={tdStyleCenter}>{row.shift || "N/A"}</td>
-                                      <td style={tdStyleCenter}>{selectedProject?.project_code || selectedProject?.project_name || "-"}</td>
-                                      <td style={tdStyleCenter}>{row.camp_no || "N/A"}</td>
-                                      <td style={tdStyleCenter}>{row.room_no || "N/A"}</td>
+                                  {group.items.length > 0 ? (
+                                    group.items.map((row, index) => (
+                                      <tr key={`${group.section}-${row.id}`}>
+                                        <td style={tdStyleCenter}>{index + 1}</td>
+                                        <td style={tdStyle}>{row.emp_no}</td>
+                                        <td style={tdStyle}>{row.name_en}</td>
+                                        <td style={{ ...tdStyle, direction: "rtl", textAlign: "right" }}>{row.name_ar || "-"}</td>
+                                        <td style={tdStyle}>{row.designation || "-"}</td>
+                                        <td style={tdStyleCenter}>{row.section || "-"}</td>
+                                        <td style={tdStyleCenter}>{row.shift || "N/A"}</td>
+                                        <td style={tdStyleCenter}>{row.camp_no || "N/A"}</td>
+                                        <td style={tdStyleCenter}>{row.room_no || "N/A"}</td>
+                                      </tr>
+                                    ))
+                                  ) : (
+                                    <tr>
+                                      <td style={emptyTd} colSpan="9">
+                                        No employees in this section
+                                      </td>
                                     </tr>
-                                  ))}
+                                  )}
                                 </tbody>
                               </table>
                             </div>
@@ -1670,7 +1811,7 @@ export default function App() {
                       </div>
                     </>
                   ) : (
-                    <div style={emptyGroupBox}>{selectedProjectId ? "No employees found for this project" : "Select a project first"}</div>
+                    <div style={emptyGroupBox}>Select a project first</div>
                   )}
                 </div>
               </div>
@@ -1882,8 +2023,9 @@ function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd, onEdit
       </div>
       <div style={employeeCardBadgeRow}>
         <span style={employeeBadge}>{employee.designation || "No Designation"}</span>
-        <span style={employeeBadgeMuted}>{employee.shift || "No Shift"}</span>
+        <span style={employeeBadgeMuted}>{employee.section || "Others"}</span>
       </div>
+      <div style={employeeCardInfo}>Shift: {employee.shift || "-"}</div>
       <div style={employeeCardInfo}>Rig: {employee.rig_no || "-"}</div>
       <div style={employeeCardInfo}>Status: {employee.status || "-"}</div>
       <div style={employeeCardInfo}>Current Project: {employee.current_project || "Unassigned"}</div>
@@ -1927,7 +2069,14 @@ function SectionHeaderWithSearchAndActions({ title, value, onChange, placeholder
     <div style={sectionHeaderWrap}>
       <h2 style={sectionTitle}>{title}</h2>
       <div className="no-print" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-        <input type="text" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ ...inputStyle, width: 320, maxWidth: "100%" }} />
+        <input
+          type="text"
+          autoComplete="off"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          style={{ ...inputStyle, width: 320, maxWidth: "100%" }}
+        />
         {onExportExcel && (
           <button type="button" onClick={onExportExcel} style={{ ...buttonStyle, background: buttonSuccess }}>Export Excel</button>
         )}
@@ -2198,40 +2347,141 @@ const statCard = {
 };
 
 const statIcon = { fontSize: 24, marginBottom: 10 };
-const statTitle = { color: "#94a3b8", marginBottom: 10, fontSize: 15, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4 };
+const statTitle = {
+  color: "#94a3b8",
+  marginBottom: 10,
+  fontSize: 15,
+  minHeight: 40,
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  lineHeight: 1.4
+};
 const statValue = { fontSize: 34, fontWeight: 800, color: "#ffffff" };
 
 const tabsWrap = { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 };
-const tabButton = { padding: "12px 18px", borderRadius: 14, border: "1px solid rgba(148,163,184,0.12)", color: "#e2e8f0", cursor: "pointer", fontWeight: 700, fontSize: 14, background: "rgba(15,23,42,0.86)", transition: "all 0.2s ease", boxShadow: "0 8px 20px rgba(0,0,0,0.18)" };
-const activeTabButton = { background: "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(14,165,233,0.88))", color: "#ffffff", border: "1px solid rgba(125,211,252,0.42)", transform: "translateY(-1px)" };
+const tabButton = {
+  padding: "12px 18px",
+  borderRadius: 14,
+  border: "1px solid rgba(148,163,184,0.12)",
+  color: "#e2e8f0",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 14,
+  background: "rgba(15,23,42,0.86)",
+  transition: "all 0.2s ease",
+  boxShadow: "0 8px 20px rgba(0,0,0,0.18)"
+};
+const activeTabButton = {
+  background: "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(14,165,233,0.88))",
+  color: "#ffffff",
+  border: "1px solid rgba(125,211,252,0.42)",
+  transform: "translateY(-1px)"
+};
 
 const formGrid4 = { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 };
 const formGrid3 = { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 };
 const formGrid2 = { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 };
 
-const inputStyle = { padding: "13px 15px", borderRadius: 14, border: "1px solid rgba(203,213,225,0.18)", background: "rgba(248,250,252,0.95)", color: "#0f172a", fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)" };
+const inputStyle = {
+  padding: "13px 15px",
+  borderRadius: 14,
+  border: "1px solid rgba(203,213,225,0.18)",
+  background: "rgba(248,250,252,0.95)",
+  color: "#0f172a",
+  fontSize: 14,
+  width: "100%",
+  boxSizing: "border-box",
+  outline: "none",
+  boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)"
+};
 
 const actionRow = { display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" };
-const buttonStyle = { padding: "11px 18px", borderRadius: 14, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 14, boxShadow: "0 10px 24px rgba(0,0,0,0.22)" };
-const miniButton = { padding: "8px 12px", borderRadius: 10, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 13, boxShadow: "0 8px 18px rgba(0,0,0,0.18)" };
+const buttonStyle = {
+  padding: "11px 18px",
+  borderRadius: 14,
+  border: "none",
+  color: "#ffffff",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 14,
+  boxShadow: "0 10px 24px rgba(0,0,0,0.22)"
+};
+const miniButton = {
+  padding: "8px 12px",
+  borderRadius: 10,
+  border: "none",
+  color: "#ffffff",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: 13,
+  boxShadow: "0 8px 18px rgba(0,0,0,0.18)"
+};
 const smallActionWrap = { display: "flex", gap: 6, flexWrap: "wrap" };
-const sectionHeaderWrap = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 };
+const sectionHeaderWrap = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  gap: 12,
+  flexWrap: "wrap",
+  marginBottom: 18
+};
 const sectionTitle = { margin: 0, fontSize: 22, fontWeight: 800, color: "#f8fafc", letterSpacing: "-0.01em" };
 const subInfoText = { marginTop: 12, color: "#94a3b8", fontSize: 14 };
-const tableWrap = { overflowX: "auto", borderRadius: 12, background: "#ffffff", border: "1px solid rgba(226,232,240,0.75)", boxShadow: "0 12px 26px rgba(0,0,0,0.16)" };
+const tableWrap = {
+  overflowX: "auto",
+  borderRadius: 12,
+  background: "#ffffff",
+  border: "1px solid rgba(226,232,240,0.75)",
+  boxShadow: "0 12px 26px rgba(0,0,0,0.16)"
+};
 const tableStyle = { width: "100%", minWidth: 1100, borderCollapse: "collapse", background: "rgba(255,255,255,0.97)", color: "#0f172a" };
 const groupTableStyle = { width: "100%", minWidth: 1000, borderCollapse: "collapse", background: "#ffffff", color: "#0f172a" };
-const thStyle = { padding: 14, textAlign: "left", background: "linear-gradient(180deg, #0b0b0b 0%, #111827 100%)", borderBottom: "1px solid #1f2937", whiteSpace: "nowrap", fontSize: 14, color: "#ffffff", fontWeight: 800 };
+const thStyle = {
+  padding: 14,
+  textAlign: "left",
+  background: "linear-gradient(180deg, #0b0b0b 0%, #111827 100%)",
+  borderBottom: "1px solid #1f2937",
+  whiteSpace: "nowrap",
+  fontSize: 14,
+  color: "#ffffff",
+  fontWeight: 800
+};
 const thStyleCenter = { ...thStyle, textAlign: "center" };
-const tdStyle = { padding: 14, borderBottom: "1px solid #e5e7eb", verticalAlign: "top", fontSize: 14, color: "#111827", lineHeight: 1.5 };
+const tdStyle = {
+  padding: 14,
+  borderBottom: "1px solid #e5e7eb",
+  verticalAlign: "top",
+  fontSize: 14,
+  color: "#111827",
+  lineHeight: 1.5
+};
 const tdStyleCenter = { ...tdStyle, textAlign: "center" };
 const emptyTd = { padding: 28, textAlign: "center", color: "#64748b", fontWeight: "700", fontSize: 15 };
-const projectInfoBox = { background: "linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.92))", border: "1px solid rgba(59,130,246,0.22)", borderRadius: 14, padding: 14, display: "flex", alignItems: "center", color: "#cbd5e1", fontWeight: "700", minHeight: 48 };
+const projectInfoBox = {
+  background: "linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.92))",
+  border: "1px solid rgba(59,130,246,0.22)",
+  borderRadius: 14,
+  padding: 14,
+  display: "flex",
+  alignItems: "center",
+  color: "#cbd5e1",
+  fontWeight: "700",
+  minHeight: 48
+};
 const designationGroupsWrap = { display: "flex", flexDirection: "column", gap: 14 };
 const designationGroupCard = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 20, padding: 10 };
 const designationHeader = { marginBottom: 12, padding: "4px 2px" };
 const designationHeaderTitle = { textAlign: "center", color: "#ffffff", fontSize: 24, fontWeight: 800, textDecoration: "underline", letterSpacing: "0.02em" };
-const emptyGroupBox = { padding: 30, borderRadius: 18, textAlign: "center", color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.14)", fontWeight: 700 };
+const emptyGroupBox = {
+  padding: 30,
+  borderRadius: 18,
+  textAlign: "center",
+  color: "#cbd5e1",
+  background: "rgba(255,255,255,0.04)",
+  border: "1px dashed rgba(255,255,255,0.14)",
+  fontWeight: 700
+};
 
 const adminLayout = {
   display: "grid",
