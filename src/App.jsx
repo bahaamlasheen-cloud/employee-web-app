@@ -103,10 +103,6 @@ function nowStamp() {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
-function uid() {
-  return Date.now() + Math.floor(Math.random() * 100000);
-}
-
 function exportRowsToExcel(rows, sheetName, fileName) {
   const worksheet = XLSX.utils.json_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
@@ -116,6 +112,19 @@ function exportRowsToExcel(rows, sheetName, fileName) {
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function cleanExcelNumber(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") {
+    if (Number.isInteger(value)) return String(value);
+    return String(value);
+  }
+  return String(value).trim();
+}
+
+function removeIdFromRows(rows) {
+  return (rows || []).map(({ id, ...rest }) => rest);
 }
 
 async function fetchRows(table, orderBy = "id", ascending = false) {
@@ -133,7 +142,6 @@ async function fetchMaybeSingle(table, column, value) {
 async function logChange(entityType, entityId, action, details) {
   const { error } = await supabase.from(TABLES.logs).insert([
     {
-      id: uid(),
       entity_type: entityType,
       entity_id: String(entityId ?? ""),
       action,
@@ -151,7 +159,8 @@ async function deleteAllRows(table) {
 
 async function insertRows(table, rows) {
   if (!rows?.length) return;
-  const { error } = await supabase.from(table).insert(rows);
+  const rowsWithoutId = removeIdFromRows(rows);
+  const { error } = await supabase.from(table).insert(rowsWithoutId);
   if (error) throw error;
 }
 
@@ -490,9 +499,17 @@ export default function App() {
         alert("Employee updated successfully.");
       } else {
         const row = {
-          ...employeeForm,
+          emp_no: employeeForm.emp_no,
+          name_en: employeeForm.name_en,
+          name_ar: employeeForm.name_ar,
+          designation: employeeForm.designation,
           section: normalizeSection(employeeForm.section),
-          id: uid(),
+          rig_no: employeeForm.rig_no,
+          shift: employeeForm.shift,
+          camp_no: employeeForm.camp_no,
+          room_no: employeeForm.room_no,
+          status: employeeForm.status,
+          notes: employeeForm.notes,
           created_at: nowStamp(),
           updated_at: nowStamp()
         };
@@ -500,7 +517,7 @@ export default function App() {
         const { error } = await supabase.from(TABLES.employees).insert([row]);
         if (error) throw error;
 
-        await logChange("employee", row.id, "CREATE", `Added employee ${row.emp_no} - ${row.name_en}`);
+        await logChange("employee", employeeForm.emp_no, "CREATE", `Added employee ${row.emp_no} - ${row.name_en}`);
         alert("Employee added successfully.");
       }
 
@@ -594,8 +611,11 @@ export default function App() {
         alert("Project updated successfully.");
       } else {
         const row = {
-          ...projectForm,
-          id: uid(),
+          project_name: projectForm.project_name,
+          project_code: projectForm.project_code,
+          location: projectForm.location,
+          status: projectForm.status,
+          notes: projectForm.notes,
           created_at: nowStamp(),
           updated_at: nowStamp()
         };
@@ -603,7 +623,7 @@ export default function App() {
         const { error } = await supabase.from(TABLES.projects).insert([row]);
         if (error) throw error;
 
-        await logChange("project", row.id, "CREATE", `Added project ${row.project_name}`);
+        await logChange("project", projectForm.project_name, "CREATE", `Added project ${projectForm.project_name}`);
         alert("Project added successfully.");
       }
 
@@ -699,7 +719,6 @@ export default function App() {
       );
     } else {
       const row = {
-        id: uid(),
         employee_id: Number(employeeId),
         project_id: Number(projectId),
         assigned_at: nowStamp(),
@@ -768,7 +787,6 @@ export default function App() {
       }
 
       const row = {
-        id: uid(),
         employee_id: Number(workEntryForm.employee_id),
         project_id: Number(assignment.project_id),
         work_date: workEntryForm.work_date,
@@ -824,7 +842,10 @@ export default function App() {
       let updated = 0;
 
       for (const row of json) {
-        const empNo = String(row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || "").trim();
+        const empNo = cleanExcelNumber(
+          row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || ""
+        );
+
         if (!empNo) continue;
 
         const payload = {
@@ -857,7 +878,6 @@ export default function App() {
         } else {
           const { error } = await supabase.from(TABLES.employees).insert([
             {
-              id: uid(),
               ...payload,
               created_at: nowStamp(),
               updated_at: nowStamp()
@@ -1031,8 +1051,7 @@ export default function App() {
     return SECTION_OPTIONS.map((section) => ({
       section,
       count: map.get(section)?.length || 0,
-      items: [...(map.get(section) || [])].sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || ""))
-      )
+      items: [...(map.get(section) || [])].sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")))
     }));
   }, [projectViewFilteredEmployees]);
 
