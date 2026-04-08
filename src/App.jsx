@@ -113,6 +113,10 @@ function downloadJsonBackup() {
   URL.revokeObjectURL(url);
 }
 
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function enrichData() {
   const employeesRaw = readRows(STORAGE_KEYS.employees);
   const projectsRaw = readRows(STORAGE_KEYS.projects);
@@ -148,7 +152,10 @@ function enrichData() {
         ...a,
         emp_no: employee.emp_no,
         name_en: employee.name_en,
+        name_ar: employee.name_ar,
         designation: employee.designation,
+        shift: employee.shift,
+        rig_no: employee.rig_no,
         project_name: project.project_name,
         project_code: project.project_code
       };
@@ -218,6 +225,10 @@ function enrichData() {
   };
 }
 
+function getEmployeeAssignment(employeeId) {
+  return readRows(STORAGE_KEYS.assignments).find((row) => Number(row.employee_id) === Number(employeeId)) || null;
+}
+
 export default function App() {
   const employeeImportRef = useRef(null);
   const backupImportRef = useRef(null);
@@ -247,11 +258,18 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedProjectEmployees, setSelectedProjectEmployees] = useState([]);
 
+  const [searchDashboard, setSearchDashboard] = useState("");
   const [searchEmployee, setSearchEmployee] = useState("");
   const [searchProject, setSearchProject] = useState("");
   const [searchAssignment, setSearchAssignment] = useState("");
   const [searchHours, setSearchHours] = useState("");
+  const [searchProjectView, setSearchProjectView] = useState("");
   const [searchLogs, setSearchLogs] = useState("");
+  const [searchAdminEmployees, setSearchAdminEmployees] = useState("");
+  const [searchAdminProjects, setSearchAdminProjects] = useState("");
+
+  const [draggingEmployeeId, setDraggingEmployeeId] = useState(null);
+  const [adminHighlightProjectId, setAdminHighlightProjectId] = useState(null);
 
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [isEditingProject, setIsEditingProject] = useState(false);
@@ -488,26 +506,27 @@ export default function App() {
     alert("Project deleted successfully.");
   };
 
-  const saveAssignment = () => {
-    if (!assignmentForm.employee_id || !assignmentForm.project_id) {
-      alert("Please select employee and project.");
+  const upsertAssignment = (employeeId, projectId, noteText = "") => {
+    const rows = readRows(STORAGE_KEYS.assignments);
+    const existing = rows.find((row) => Number(row.employee_id) === Number(employeeId));
+    const projectsRows = readRows(STORAGE_KEYS.projects);
+    const employeesRows = readRows(STORAGE_KEYS.employees);
+    const project = projectsRows.find((p) => Number(p.id) === Number(projectId));
+    const employee = employeesRows.find((e) => Number(e.id) === Number(employeeId));
+
+    if (!employee || !project) {
+      alert("Employee or project not found.");
       return;
     }
 
-    const rows = readRows(STORAGE_KEYS.assignments);
-    const existing = rows.find((row) => Number(row.employee_id) === Number(assignmentForm.employee_id));
-    const projectsRows = readRows(STORAGE_KEYS.projects);
-    const employeesRows = readRows(STORAGE_KEYS.employees);
-    const project = projectsRows.find((p) => Number(p.id) === Number(assignmentForm.project_id));
-    const employee = employeesRows.find((e) => Number(e.id) === Number(assignmentForm.employee_id));
-
     if (existing) {
+      const oldProject = projectsRows.find((p) => Number(p.id) === Number(existing.project_id));
       const updated = rows.map((row) =>
-        Number(row.employee_id) === Number(assignmentForm.employee_id)
+        Number(row.employee_id) === Number(employeeId)
           ? {
               ...row,
-              project_id: Number(assignmentForm.project_id),
-              notes: assignmentForm.notes || "",
+              project_id: Number(projectId),
+              notes: noteText || row.notes || "",
               assigned_at: nowStamp()
             }
           : row
@@ -515,31 +534,39 @@ export default function App() {
       writeRows(STORAGE_KEYS.assignments, updated);
       logChange(
         "assignment",
-        assignmentForm.employee_id,
+        employeeId,
         "TRANSFER",
-        `Transferred ${employee?.name_en || "employee"} to ${project?.project_name || "project"}`
+        `Transferred ${employee?.name_en || "employee"} from ${oldProject?.project_name || "Unassigned"} to ${project?.project_name || "project"}`
       );
-      alert("Employee transferred successfully.");
     } else {
       rows.unshift({
         id: uid(),
-        employee_id: Number(assignmentForm.employee_id),
-        project_id: Number(assignmentForm.project_id),
+        employee_id: Number(employeeId),
+        project_id: Number(projectId),
         assigned_at: nowStamp(),
-        notes: assignmentForm.notes || ""
+        notes: noteText || ""
       });
       writeRows(STORAGE_KEYS.assignments, rows);
       logChange(
         "assignment",
-        assignmentForm.employee_id,
+        employeeId,
         "ASSIGN",
         `Assigned ${employee?.name_en || "employee"} to ${project?.project_name || "project"}`
       );
-      alert("Employee assigned successfully.");
     }
 
-    setAssignmentForm(emptyAssignment);
     refreshAll();
+  };
+
+  const saveAssignment = () => {
+    if (!assignmentForm.employee_id || !assignmentForm.project_id) {
+      alert("Please select employee and project.");
+      return;
+    }
+
+    upsertAssignment(assignmentForm.employee_id, assignmentForm.project_id, assignmentForm.notes || "");
+    setAssignmentForm(emptyAssignment);
+    alert("Employee assigned successfully.");
   };
 
   const unassignEmployee = (employeeId) => {
@@ -687,11 +714,22 @@ export default function App() {
     window.print();
   };
 
+  const filteredDashboardRows = useMemo(() => {
+    const q = normalizeText(searchDashboard);
+    if (!q) return hoursSummary;
+    return hoursSummary.filter((row) =>
+      [row.emp_no, row.name_en, row.designation, row.current_project, row.total_regular_hours, row.total_overtime_hours, row.total_hours]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [hoursSummary, searchDashboard]);
+
   const filteredEmployees = useMemo(() => {
-    const q = searchEmployee.trim().toLowerCase();
+    const q = normalizeText(searchEmployee);
     if (!q) return employees;
     return employees.filter((e) =>
-      [e.emp_no, e.name_en, e.name_ar, e.designation, e.current_project, e.status, e.shift, e.rig_no]
+      [e.emp_no, e.name_en, e.name_ar, e.designation, e.current_project, e.status, e.shift, e.rig_no, e.camp_no, e.room_no, e.notes]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -699,31 +737,31 @@ export default function App() {
   }, [employees, searchEmployee]);
 
   const filteredProjects = useMemo(() => {
-    const q = searchProject.trim().toLowerCase();
+    const q = normalizeText(searchProject);
     if (!q) return projects;
     return projects.filter((p) =>
-      [p.project_name, p.project_code, p.location, p.status, p.notes].join(" ").toLowerCase().includes(q)
+      [p.project_name, p.project_code, p.location, p.status, p.notes, p.employees_count].join(" ").toLowerCase().includes(q)
     );
   }, [projects, searchProject]);
 
   const filteredAssignments = useMemo(() => {
-    const q = searchAssignment.trim().toLowerCase();
+    const q = normalizeText(searchAssignment);
     if (!q) return assignments;
     return assignments.filter((a) =>
-      [a.emp_no, a.name_en, a.designation, a.project_name, a.project_code].join(" ").toLowerCase().includes(q)
+      [a.emp_no, a.name_en, a.designation, a.project_name, a.project_code, a.shift, a.rig_no, a.notes].join(" ").toLowerCase().includes(q)
     );
   }, [assignments, searchAssignment]);
 
   const filteredWorkEntries = useMemo(() => {
-    const q = searchHours.trim().toLowerCase();
+    const q = normalizeText(searchHours);
     if (!q) return workEntries;
     return workEntries.filter((w) =>
-      [w.emp_no, w.name_en, w.project_name, w.work_date, w.notes].join(" ").toLowerCase().includes(q)
+      [w.emp_no, w.name_en, w.project_name, w.work_date, w.notes, w.regular_hours, w.overtime_hours].join(" ").toLowerCase().includes(q)
     );
   }, [workEntries, searchHours]);
 
   const filteredLogs = useMemo(() => {
-    const q = searchLogs.trim().toLowerCase();
+    const q = normalizeText(searchLogs);
     if (!q) return logs;
     return logs.filter((l) =>
       [l.entity_type, l.entity_id, l.action, l.details, l.created_at].join(" ").toLowerCase().includes(q)
@@ -734,11 +772,22 @@ export default function App() {
     return projects.find((p) => String(p.id) === String(selectedProjectId)) || null;
   }, [projects, selectedProjectId]);
 
+  const projectViewFilteredEmployees = useMemo(() => {
+    const q = normalizeText(searchProjectView);
+    if (!q) return selectedProjectEmployees;
+    return selectedProjectEmployees.filter((emp) =>
+      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.shift, emp.camp_no, emp.room_no, emp.rig_no, emp.status]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
+    );
+  }, [selectedProjectEmployees, searchProjectView]);
+
   const groupedProjectEmployees = useMemo(() => {
-    if (!selectedProjectEmployees.length) return [];
+    if (!projectViewFilteredEmployees.length) return [];
     const map = new Map();
 
-    selectedProjectEmployees.forEach((emp) => {
+    projectViewFilteredEmployees.forEach((emp) => {
       const designation = (emp.designation || "Uncategorized").trim() || "Uncategorized";
       if (!map.has(designation)) map.set(designation, []);
       map.get(designation).push(emp);
@@ -751,7 +800,63 @@ export default function App() {
         count: items.length,
         items: [...items].sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")))
       }));
-  }, [selectedProjectEmployees]);
+  }, [projectViewFilteredEmployees]);
+
+  const filteredAdminEmployees = useMemo(() => {
+    const q = normalizeText(searchAdminEmployees);
+    if (!q) return employees;
+    return employees.filter((emp) =>
+      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.current_project, emp.shift, emp.rig_no, emp.status].join(" ").toLowerCase().includes(q)
+    );
+  }, [employees, searchAdminEmployees]);
+
+  const filteredAdminProjects = useMemo(() => {
+    const q = normalizeText(searchAdminProjects);
+    if (!q) return projects;
+    return projects.filter((project) =>
+      [project.project_name, project.project_code, project.location, project.status, project.notes].join(" ").toLowerCase().includes(q)
+    );
+  }, [projects, searchAdminProjects]);
+
+  const adminUnassignedEmployees = useMemo(() => {
+    return filteredAdminEmployees
+      .filter((emp) => !emp.current_project_id)
+      .sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")));
+  }, [filteredAdminEmployees]);
+
+  const adminProjectBoards = useMemo(() => {
+    return filteredAdminProjects
+      .map((project) => ({
+        ...project,
+        employees: filteredAdminEmployees
+          .filter((emp) => Number(emp.current_project_id) === Number(project.id))
+          .sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")))
+      }))
+      .sort((a, b) => String(a.project_name || "").localeCompare(String(b.project_name || "")));
+  }, [filteredAdminProjects, filteredAdminEmployees]);
+
+  const onDragStartEmployee = (employeeId) => {
+    setDraggingEmployeeId(Number(employeeId));
+  };
+
+  const onDragEndEmployee = () => {
+    setDraggingEmployeeId(null);
+    setAdminHighlightProjectId(null);
+  };
+
+  const onDropToProject = (projectId) => {
+    if (!draggingEmployeeId) return;
+    upsertAssignment(draggingEmployeeId, projectId, "Moved from admin drag & drop");
+    setDraggingEmployeeId(null);
+    setAdminHighlightProjectId(null);
+  };
+
+  const onDropToUnassigned = () => {
+    if (!draggingEmployeeId) return;
+    unassignEmployee(draggingEmployeeId);
+    setDraggingEmployeeId(null);
+    setAdminHighlightProjectId(null);
+  };
 
   return (
     <div style={pageStyle}>
@@ -765,7 +870,7 @@ export default function App() {
           <div style={heroBadge}>Web App Version</div>
           <h1 style={heroTitle}>Employee Management & Allocation System</h1>
           <p style={heroSubtitle}>
-            Browser-based app with Local Storage, Excel Import/Export, Project Allocation, Work Hours, OT, and Logs
+            Browser-based app with Local Storage, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
           </p>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 16 }}>
@@ -787,6 +892,7 @@ export default function App() {
             { key: "assignments", label: "Assignments" },
             { key: "hours", label: "Work Hours" },
             { key: "project_view", label: "Project Employees" },
+            { key: "admin", label: "Admin Page" },
             { key: "logs", label: "Logs" }
           ].map((tab) => (
             <button
@@ -802,7 +908,7 @@ export default function App() {
 
         {activeTab === "dashboard" && (
           <>
-            <div style={statsGrid}>
+            <div style={statsGrid} className="responsive-grid-6">
               <StatCard title="Total Employees" value={stats.totalEmployees} icon="👥" />
               <StatCard title="Total Projects" value={stats.totalProjects} icon="🏗️" />
               <StatCard title="Assigned Employees" value={stats.assignedEmployees} icon="📌" />
@@ -812,11 +918,14 @@ export default function App() {
             </div>
 
             <div style={cardStyle}>
-              <SectionHeaderWithActions
+              <SectionHeaderWithSearchAndActions
                 title="Employee Hours Summary"
+                value={searchDashboard}
+                onChange={setSearchDashboard}
+                placeholder="Filter dashboard summary..."
                 onExportExcel={() =>
                   exportRowsToExcel(
-                    hoursSummary.map((row) => ({
+                    filteredDashboardRows.map((row) => ({
                       "Emp No": row.emp_no,
                       Employee: row.name_en,
                       Designation: row.designation,
@@ -832,42 +941,44 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div className="print-area">
-                <div className="print-report-title">Employee Hours Summary</div>
-                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div className="print-table-wrap" style={tableWrap}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Emp No</th>
-                        <th style={thStyle}>Employee</th>
-                        <th style={thStyle}>Designation</th>
-                        <th style={thStyle}>Current Project</th>
-                        <th style={thStyle}>Regular Hours</th>
-                        <th style={thStyle}>OT Hours</th>
-                        <th style={thStyle}>Total Hours</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hoursSummary.length > 0 ? (
-                        hoursSummary.map((row) => (
-                          <tr key={row.employee_id}>
-                            <td style={tdStyle}>{row.emp_no}</td>
-                            <td style={tdStyle}>{row.name_en}</td>
-                            <td style={tdStyle}>{row.designation}</td>
-                            <td style={tdStyle}>{row.current_project || "-"}</td>
-                            <td style={tdStyle}>{row.total_regular_hours}</td>
-                            <td style={tdStyle}>{row.total_overtime_hours}</td>
-                            <td style={tdStyle}>{row.total_hours}</td>
-                          </tr>
-                        ))
-                      ) : (
+              <div className="print-page-shell">
+                <div className="print-area">
+                  <div className="print-report-title">Employee Hours Summary</div>
+                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <div className="print-table-wrap" style={tableWrap}>
+                    <table style={tableStyle}>
+                      <thead>
                         <tr>
-                          <td style={emptyTd} colSpan="7">No data found</td>
+                          <th style={thStyle}>Emp No</th>
+                          <th style={thStyle}>Employee</th>
+                          <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Current Project</th>
+                          <th style={thStyle}>Regular Hours</th>
+                          <th style={thStyle}>OT Hours</th>
+                          <th style={thStyle}>Total Hours</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredDashboardRows.length > 0 ? (
+                          filteredDashboardRows.map((row) => (
+                            <tr key={row.employee_id}>
+                              <td style={tdStyle}>{row.emp_no}</td>
+                              <td style={tdStyle}>{row.name_en}</td>
+                              <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.current_project || "-"}</td>
+                              <td style={tdStyle}>{row.total_regular_hours}</td>
+                              <td style={tdStyle}>{row.total_overtime_hours}</td>
+                              <td style={tdStyle}>{row.total_hours}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={emptyTd} colSpan="7">No data found</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -889,7 +1000,7 @@ export default function App() {
                 }
               />
 
-              <div style={formGrid4}>
+              <div style={formGrid4} className="responsive-grid-4">
                 <input type="text" autoComplete="off" name="emp_no" placeholder="Emp No *" value={employeeForm.emp_no} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="name_en" placeholder="Employee Name EN *" value={employeeForm.name_en} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="name_ar" placeholder="Employee Name AR" value={employeeForm.name_ar} onChange={handleEmployeeChange} style={inputStyle} />
@@ -919,7 +1030,7 @@ export default function App() {
                 title="Employees List"
                 value={searchEmployee}
                 onChange={setSearchEmployee}
-                placeholder="Search employees..."
+                placeholder="Filter employees..."
                 onExportExcel={() =>
                   exportRowsToExcel(
                     filteredEmployees.map((emp) => ({
@@ -940,54 +1051,56 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div className="print-area">
-                <div className="print-report-title">Employees List</div>
-                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div style={subInfoText} className="no-print">
-                  Showing <strong style={{ color: "#ffffff" }}>{filteredEmployees.length}</strong> record(s)
-                </div>
-                <div className="print-table-wrap" style={tableWrap}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Emp No</th>
-                        <th style={thStyle}>Name EN</th>
-                        <th style={thStyle}>Name AR</th>
-                        <th style={thStyle}>Designation</th>
-                        <th style={thStyle}>Rig</th>
-                        <th style={thStyle}>Shift</th>
-                        <th style={thStyle}>Current Project</th>
-                        <th style={thStyle}>Status</th>
-                        <th className="no-print" style={thStyle}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredEmployees.length > 0 ? (
-                        filteredEmployees.map((emp) => (
-                          <tr key={emp.id}>
-                            <td style={tdStyle}>{emp.emp_no}</td>
-                            <td style={tdStyle}>{emp.name_en}</td>
-                            <td style={tdStyle}>{emp.name_ar}</td>
-                            <td style={tdStyle}>{emp.designation}</td>
-                            <td style={tdStyle}>{emp.rig_no}</td>
-                            <td style={tdStyle}>{emp.shift}</td>
-                            <td style={tdStyle}>{emp.current_project || "-"}</td>
-                            <td style={tdStyle}>{emp.status || "-"}</td>
-                            <td className="no-print" style={tdStyle}>
-                              <div style={smallActionWrap}>
-                                <button type="button" onClick={() => startEditEmployee(emp)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
-                                <button type="button" onClick={() => deleteEmployee(emp.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
+              <div className="print-page-shell">
+                <div className="print-area">
+                  <div className="print-report-title">Employees List</div>
+                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <div style={subInfoText} className="no-print">
+                    Showing <strong style={{ color: "#ffffff" }}>{filteredEmployees.length}</strong> record(s)
+                  </div>
+                  <div className="print-table-wrap" style={tableWrap}>
+                    <table style={tableStyle}>
+                      <thead>
                         <tr>
-                          <td style={emptyTd} colSpan="9">No employees found</td>
+                          <th style={thStyle}>Emp No</th>
+                          <th style={thStyle}>Name EN</th>
+                          <th style={thStyle}>Name AR</th>
+                          <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Rig</th>
+                          <th style={thStyle}>Shift</th>
+                          <th style={thStyle}>Current Project</th>
+                          <th style={thStyle}>Status</th>
+                          <th className="no-print" style={thStyle}>Actions</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredEmployees.length > 0 ? (
+                          filteredEmployees.map((emp) => (
+                            <tr key={emp.id}>
+                              <td style={tdStyle}>{emp.emp_no}</td>
+                              <td style={tdStyle}>{emp.name_en}</td>
+                              <td style={tdStyle}>{emp.name_ar}</td>
+                              <td style={tdStyle}>{emp.designation}</td>
+                              <td style={tdStyle}>{emp.rig_no}</td>
+                              <td style={tdStyle}>{emp.shift}</td>
+                              <td style={tdStyle}>{emp.current_project || "-"}</td>
+                              <td style={tdStyle}>{emp.status || "-"}</td>
+                              <td className="no-print" style={tdStyle}>
+                                <div style={smallActionWrap}>
+                                  <button type="button" onClick={() => startEditEmployee(emp)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
+                                  <button type="button" onClick={() => deleteEmployee(emp.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={emptyTd} colSpan="9">No employees found</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -999,7 +1112,7 @@ export default function App() {
             <div className="no-print" style={cardStyle}>
               <SectionTitle title={isEditingProject ? "Edit Project" : "Add Project"} />
 
-              <div style={formGrid4}>
+              <div style={formGrid4} className="responsive-grid-4">
                 <input type="text" autoComplete="off" name="project_name" placeholder="Project Name *" value={projectForm.project_name} onChange={handleProjectChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="project_code" placeholder="Project Code" value={projectForm.project_code} onChange={handleProjectChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="location" placeholder="Location" value={projectForm.location} onChange={handleProjectChange} style={inputStyle} />
@@ -1028,7 +1141,7 @@ export default function App() {
                 title="Projects List"
                 value={searchProject}
                 onChange={setSearchProject}
-                placeholder="Search projects..."
+                placeholder="Filter projects..."
                 onExportExcel={() =>
                   exportRowsToExcel(
                     filteredProjects.map((project) => ({
@@ -1046,46 +1159,48 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div className="print-area">
-                <div className="print-report-title">Projects List</div>
-                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div className="print-table-wrap" style={tableWrap}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Project Name</th>
-                        <th style={thStyle}>Code</th>
-                        <th style={thStyle}>Location</th>
-                        <th style={thStyle}>Status</th>
-                        <th style={thStyle}>Employees Count</th>
-                        <th className="no-print" style={thStyle}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredProjects.length > 0 ? (
-                        filteredProjects.map((project) => (
-                          <tr key={project.id}>
-                            <td style={tdStyle}>{project.project_name}</td>
-                            <td style={tdStyle}>{project.project_code || "-"}</td>
-                            <td style={tdStyle}>{project.location || "-"}</td>
-                            <td style={tdStyle}>{project.status || "-"}</td>
-                            <td style={tdStyle}>{project.employees_count}</td>
-                            <td className="no-print" style={tdStyle}>
-                              <div style={smallActionWrap}>
-                                <button type="button" onClick={() => startEditProject(project)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
-                                <button type="button" onClick={() => { setSelectedProjectId(String(project.id)); setActiveTab("project_view"); }} style={{ ...miniButton, background: buttonPrimary }}>View Employees</button>
-                                <button type="button" onClick={() => deleteProject(project.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
+              <div className="print-page-shell">
+                <div className="print-area">
+                  <div className="print-report-title">Projects List</div>
+                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <div className="print-table-wrap" style={tableWrap}>
+                    <table style={tableStyle}>
+                      <thead>
                         <tr>
-                          <td style={emptyTd} colSpan="6">No projects found</td>
+                          <th style={thStyle}>Project Name</th>
+                          <th style={thStyle}>Code</th>
+                          <th style={thStyle}>Location</th>
+                          <th style={thStyle}>Status</th>
+                          <th style={thStyle}>Employees Count</th>
+                          <th className="no-print" style={thStyle}>Actions</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredProjects.length > 0 ? (
+                          filteredProjects.map((project) => (
+                            <tr key={project.id}>
+                              <td style={tdStyle}>{project.project_name}</td>
+                              <td style={tdStyle}>{project.project_code || "-"}</td>
+                              <td style={tdStyle}>{project.location || "-"}</td>
+                              <td style={tdStyle}>{project.status || "-"}</td>
+                              <td style={tdStyle}>{project.employees_count}</td>
+                              <td className="no-print" style={tdStyle}>
+                                <div style={smallActionWrap}>
+                                  <button type="button" onClick={() => startEditProject(project)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
+                                  <button type="button" onClick={() => { setSelectedProjectId(String(project.id)); setActiveTab("project_view"); }} style={{ ...miniButton, background: buttonPrimary }}>View Employees</button>
+                                  <button type="button" onClick={() => deleteProject(project.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={emptyTd} colSpan="6">No projects found</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1096,7 +1211,7 @@ export default function App() {
           <>
             <div className="no-print" style={cardStyle}>
               <SectionTitle title="Assign / Transfer Employee to Project" />
-              <div style={formGrid3}>
+              <div style={formGrid3} className="responsive-grid-3">
                 <select name="employee_id" value={assignmentForm.employee_id} onChange={handleAssignmentChange} style={inputStyle}>
                   <option value="">Select Employee</option>
                   {employees.map((emp) => (
@@ -1125,7 +1240,7 @@ export default function App() {
                 title="Current Assignments"
                 value={searchAssignment}
                 onChange={setSearchAssignment}
-                placeholder="Search assignments..."
+                placeholder="Filter assignments..."
                 onExportExcel={() =>
                   exportRowsToExcel(
                     filteredAssignments.map((row) => ({
@@ -1144,44 +1259,46 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div className="print-area">
-                <div className="print-report-title">Current Assignments</div>
-                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div className="print-table-wrap" style={tableWrap}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Emp No</th>
-                        <th style={thStyle}>Employee</th>
-                        <th style={thStyle}>Designation</th>
-                        <th style={thStyle}>Project</th>
-                        <th style={thStyle}>Assigned At</th>
-                        <th style={thStyle}>Notes</th>
-                        <th className="no-print" style={thStyle}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredAssignments.length > 0 ? (
-                        filteredAssignments.map((row) => (
-                          <tr key={row.id}>
-                            <td style={tdStyle}>{row.emp_no}</td>
-                            <td style={tdStyle}>{row.name_en}</td>
-                            <td style={tdStyle}>{row.designation}</td>
-                            <td style={tdStyle}>{row.project_name}</td>
-                            <td style={tdStyle}>{row.assigned_at}</td>
-                            <td style={tdStyle}>{row.notes || "-"}</td>
-                            <td className="no-print" style={tdStyle}>
-                              <button type="button" onClick={() => unassignEmployee(row.employee_id)} style={{ ...miniButton, background: buttonDanger }}>Unassign</button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
+              <div className="print-page-shell">
+                <div className="print-area">
+                  <div className="print-report-title">Current Assignments</div>
+                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <div className="print-table-wrap" style={tableWrap}>
+                    <table style={tableStyle}>
+                      <thead>
                         <tr>
-                          <td style={emptyTd} colSpan="7">No assignments found</td>
+                          <th style={thStyle}>Emp No</th>
+                          <th style={thStyle}>Employee</th>
+                          <th style={thStyle}>Designation</th>
+                          <th style={thStyle}>Project</th>
+                          <th style={thStyle}>Assigned At</th>
+                          <th style={thStyle}>Notes</th>
+                          <th className="no-print" style={thStyle}>Actions</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredAssignments.length > 0 ? (
+                          filteredAssignments.map((row) => (
+                            <tr key={row.id}>
+                              <td style={tdStyle}>{row.emp_no}</td>
+                              <td style={tdStyle}>{row.name_en}</td>
+                              <td style={tdStyle}>{row.designation}</td>
+                              <td style={tdStyle}>{row.project_name}</td>
+                              <td style={tdStyle}>{row.assigned_at}</td>
+                              <td style={tdStyle}>{row.notes || "-"}</td>
+                              <td className="no-print" style={tdStyle}>
+                                <button type="button" onClick={() => unassignEmployee(row.employee_id)} style={{ ...miniButton, background: buttonDanger }}>Unassign</button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={emptyTd} colSpan="7">No assignments found</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1192,7 +1309,7 @@ export default function App() {
           <>
             <div className="no-print" style={cardStyle}>
               <SectionTitle title="Add Work Hours / Overtime" />
-              <div style={formGrid4}>
+              <div style={formGrid4} className="responsive-grid-4">
                 <select name="employee_id" value={workEntryForm.employee_id} onChange={handleWorkEntryChange} style={inputStyle}>
                   <option value="">Select Employee</option>
                   {employees.filter((e) => e.current_project).map((emp) => (
@@ -1214,7 +1331,7 @@ export default function App() {
                 title="Work Entries"
                 value={searchHours}
                 onChange={setSearchHours}
-                placeholder="Search work entries..."
+                placeholder="Filter work entries..."
                 onExportExcel={() =>
                   exportRowsToExcel(
                     filteredWorkEntries.map((row) => ({
@@ -1233,46 +1350,48 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div className="print-area">
-                <div className="print-report-title">Work Entries</div>
-                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-                <div className="print-table-wrap" style={tableWrap}>
-                  <table style={tableStyle}>
-                    <thead>
-                      <tr>
-                        <th style={thStyle}>Date</th>
-                        <th style={thStyle}>Emp No</th>
-                        <th style={thStyle}>Employee</th>
-                        <th style={thStyle}>Project</th>
-                        <th style={thStyle}>Regular Hours</th>
-                        <th style={thStyle}>OT Hours</th>
-                        <th style={thStyle}>Notes</th>
-                        <th className="no-print" style={thStyle}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredWorkEntries.length > 0 ? (
-                        filteredWorkEntries.map((row) => (
-                          <tr key={row.id}>
-                            <td style={tdStyle}>{row.work_date}</td>
-                            <td style={tdStyle}>{row.emp_no}</td>
-                            <td style={tdStyle}>{row.name_en}</td>
-                            <td style={tdStyle}>{row.project_name}</td>
-                            <td style={tdStyle}>{row.regular_hours}</td>
-                            <td style={tdStyle}>{row.overtime_hours}</td>
-                            <td style={tdStyle}>{row.notes || "-"}</td>
-                            <td className="no-print" style={tdStyle}>
-                              <button type="button" onClick={() => deleteWorkEntry(row.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
+              <div className="print-page-shell">
+                <div className="print-area">
+                  <div className="print-report-title">Work Entries</div>
+                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <div className="print-table-wrap" style={tableWrap}>
+                    <table style={tableStyle}>
+                      <thead>
                         <tr>
-                          <td style={emptyTd} colSpan="8">No work entries found</td>
+                          <th style={thStyle}>Date</th>
+                          <th style={thStyle}>Emp No</th>
+                          <th style={thStyle}>Employee</th>
+                          <th style={thStyle}>Project</th>
+                          <th style={thStyle}>Regular Hours</th>
+                          <th style={thStyle}>OT Hours</th>
+                          <th style={thStyle}>Notes</th>
+                          <th className="no-print" style={thStyle}>Action</th>
                         </tr>
-                      )}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {filteredWorkEntries.length > 0 ? (
+                          filteredWorkEntries.map((row) => (
+                            <tr key={row.id}>
+                              <td style={tdStyle}>{row.work_date}</td>
+                              <td style={tdStyle}>{row.emp_no}</td>
+                              <td style={tdStyle}>{row.name_en}</td>
+                              <td style={tdStyle}>{row.project_name}</td>
+                              <td style={tdStyle}>{row.regular_hours}</td>
+                              <td style={tdStyle}>{row.overtime_hours}</td>
+                              <td style={tdStyle}>{row.notes || "-"}</td>
+                              <td className="no-print" style={tdStyle}>
+                                <button type="button" onClick={() => deleteWorkEntry(row.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td style={emptyTd} colSpan="8">No work entries found</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1283,16 +1402,24 @@ export default function App() {
           <>
             <div className="no-print" style={cardStyle}>
               <SectionTitle title="Project Employees" />
-              <div style={formGrid2}>
+              <div style={formGrid2} className="responsive-grid-2">
                 <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} style={inputStyle}>
                   <option value="">Select Project</option>
                   {projects.map((project) => (
                     <option key={project.id} value={project.id}>{project.project_name}</option>
                   ))}
                 </select>
-                <div style={projectInfoBox}>
-                  {selectedProjectId ? `Employees on selected project: ${selectedProjectEmployees.length}` : "Choose a project to view its employees"}
-                </div>
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={searchProjectView}
+                  onChange={(e) => setSearchProjectView(e.target.value)}
+                  placeholder="Filter selected project employees..."
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ ...projectInfoBox, marginTop: 14 }}>
+                {selectedProjectId ? `Employees on selected project: ${projectViewFilteredEmployees.length}` : "Choose a project to view its employees"}
               </div>
             </div>
 
@@ -1325,63 +1452,180 @@ export default function App() {
                 onPrint={printCurrentPage}
               />
 
-              <div className="print-area">
-                {selectedProjectId && groupedProjectEmployees.length > 0 ? (
-                  <>
-                    <div className="print-report-title">Employee Allocation Report</div>
-                    <div className="print-report-subtitle">
-                      Project: {selectedProject?.project_name || "-"}
-                      {selectedProject?.project_code ? ` | Code: ${selectedProject.project_code}` : ""}
-                    </div>
+              <div className="print-page-shell">
+                <div className="print-area">
+                  {selectedProjectId && groupedProjectEmployees.length > 0 ? (
+                    <>
+                      <div className="print-report-title">Employee Allocation Report</div>
+                      <div className="print-report-subtitle">
+                        Project: {selectedProject?.project_name || "-"}
+                        {selectedProject?.project_code ? ` | Code: ${selectedProject.project_code}` : ""}
+                      </div>
 
-                    <div style={designationGroupsWrap}>
-                      {groupedProjectEmployees.map((group) => (
-                        <div key={group.designation} className="designation-group" style={designationGroupCard}>
-                          <div style={designationHeader}>
-                            <div style={designationHeaderTitle} className="print-group-title">
-                              {group.designation.toUpperCase()} - {group.count}
+                      <div style={designationGroupsWrap}>
+                        {groupedProjectEmployees.map((group) => (
+                          <div key={group.designation} className="designation-group" style={designationGroupCard}>
+                            <div style={designationHeader}>
+                              <div style={designationHeaderTitle} className="print-group-title">
+                                {group.designation.toUpperCase()} - {group.count}
+                              </div>
+                            </div>
+
+                            <div className="print-table-wrap" style={tableWrap}>
+                              <table style={groupTableStyle}>
+                                <thead>
+                                  <tr>
+                                    <th style={{ ...thStyleCenter, width: "6%" }}>SR.NO</th>
+                                    <th style={{ ...thStyle, width: "12%" }}>EMP.NO</th>
+                                    <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME</th>
+                                    <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME AR</th>
+                                    <th style={{ ...thStyle, width: "16%" }}>DESIGNATION</th>
+                                    <th style={{ ...thStyleCenter, width: "8%" }}>SHIFT</th>
+                                    <th style={{ ...thStyleCenter, width: "10%" }}>PROJECT</th>
+                                    <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
+                                    <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {group.items.map((row, index) => (
+                                    <tr key={row.id}>
+                                      <td style={tdStyleCenter}>{index + 1}</td>
+                                      <td style={tdStyle}>{row.emp_no}</td>
+                                      <td style={tdStyle}>{row.name_en}</td>
+                                      <td style={{ ...tdStyle, direction: "rtl", textAlign: "right" }}>{row.name_ar || "-"}</td>
+                                      <td style={tdStyle}>{row.designation || "-"}</td>
+                                      <td style={tdStyleCenter}>{row.shift || "N/A"}</td>
+                                      <td style={tdStyleCenter}>{selectedProject?.project_code || selectedProject?.project_name || "-"}</td>
+                                      <td style={tdStyleCenter}>{row.camp_no || "N/A"}</td>
+                                      <td style={tdStyleCenter}>{row.room_no || "N/A"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
                           </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={emptyGroupBox}>{selectedProjectId ? "No employees found for this project" : "Select a project first"}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
-                          <div className="print-table-wrap" style={tableWrap}>
-                            <table style={groupTableStyle}>
-                              <thead>
-                                <tr>
-                                  <th style={{ ...thStyleCenter, width: "6%" }}>SR.NO</th>
-                                  <th style={{ ...thStyle, width: "12%" }}>EMP.NO</th>
-                                  <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME</th>
-                                  <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME AR</th>
-                                  <th style={{ ...thStyle, width: "16%" }}>DESIGNATION</th>
-                                  <th style={{ ...thStyleCenter, width: "8%" }}>SHIFT</th>
-                                  <th style={{ ...thStyleCenter, width: "10%" }}>PROJECT</th>
-                                  <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
-                                  <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {group.items.map((row, index) => (
-                                  <tr key={row.id}>
-                                    <td style={tdStyleCenter}>{index + 1}</td>
-                                    <td style={tdStyle}>{row.emp_no}</td>
-                                    <td style={tdStyle}>{row.name_en}</td>
-                                    <td style={{ ...tdStyle, direction: "rtl", textAlign: "right" }}>{row.name_ar || "-"}</td>
-                                    <td style={tdStyle}>{row.designation || "-"}</td>
-                                    <td style={tdStyleCenter}>{row.shift || "N/A"}</td>
-                                    <td style={tdStyleCenter}>{selectedProject?.project_code || selectedProject?.project_name || "-"}</td>
-                                    <td style={tdStyleCenter}>{row.camp_no || "N/A"}</td>
-                                    <td style={tdStyleCenter}>{row.room_no || "N/A"}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))}
+        {activeTab === "admin" && (
+          <>
+            <div className="no-print" style={cardStyle}>
+              <SectionTitle title="Admin Page - Drag & Drop Assignment" />
+              <div style={{ ...formGrid2, marginTop: 14 }} className="responsive-grid-2">
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={searchAdminEmployees}
+                  onChange={(e) => setSearchAdminEmployees(e.target.value)}
+                  placeholder="Filter employees in admin page..."
+                  style={inputStyle}
+                />
+                <input
+                  type="text"
+                  autoComplete="off"
+                  value={searchAdminProjects}
+                  onChange={(e) => setSearchAdminProjects(e.target.value)}
+                  placeholder="Filter projects in admin page..."
+                  style={inputStyle}
+                />
+              </div>
+              <div style={{ ...subInfoText, marginTop: 14 }}>
+                Drag any employee card and drop it on a project column to assign/transfer. Drop it in <strong style={{ color: "#ffffff" }}>Unassigned Pool</strong> to remove from project.
+              </div>
+            </div>
+
+            <div style={adminLayout} className="responsive-grid-2">
+              <div
+                style={{
+                  ...cardStyle,
+                  minHeight: 420,
+                  border: adminHighlightProjectId === "unassigned" ? "2px dashed rgba(45,212,191,0.85)" : cardStyle.border
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setAdminHighlightProjectId("unassigned");
+                }}
+                onDragLeave={() => setAdminHighlightProjectId(null)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  onDropToUnassigned();
+                }}
+              >
+                <div style={adminColumnHeader}>Unassigned Pool ({adminUnassignedEmployees.length})</div>
+                <div style={adminCardsWrap}>
+                  {adminUnassignedEmployees.length > 0 ? (
+                    adminUnassignedEmployees.map((emp) => (
+                      <EmployeeDragCard
+                        key={emp.id}
+                        employee={emp}
+                        isDragging={Number(draggingEmployeeId) === Number(emp.id)}
+                        onDragStart={onDragStartEmployee}
+                        onDragEnd={onDragEndEmployee}
+                        onEdit={() => startEditEmployee(emp)}
+                      />
+                    ))
+                  ) : (
+                    <div style={emptyGroupBox}>No unassigned employees</div>
+                  )}
+                </div>
+              </div>
+
+              <div style={adminProjectsGrid}>
+                {adminProjectBoards.map((project) => (
+                  <div
+                    key={project.id}
+                    style={{
+                      ...cardStyle,
+                      minHeight: 420,
+                      border:
+                        Number(adminHighlightProjectId) === Number(project.id)
+                          ? "2px dashed rgba(96,165,250,0.95)"
+                          : cardStyle.border
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setAdminHighlightProjectId(project.id);
+                    }}
+                    onDragLeave={() => setAdminHighlightProjectId(null)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      onDropToProject(project.id);
+                    }}
+                  >
+                    <div style={adminColumnHeader}>
+                      <div>{project.project_name}</div>
+                      <div style={adminColumnMeta}>
+                        {project.project_code || "No Code"} | {project.employees.length} Staff
+                      </div>
                     </div>
-                  </>
-                ) : (
-                  <div style={emptyGroupBox}>{selectedProjectId ? "No employees found for this project" : "Select a project first"}</div>
-                )}
+
+                    <div style={adminCardsWrap}>
+                      {project.employees.length > 0 ? (
+                        project.employees.map((emp) => (
+                          <EmployeeDragCard
+                            key={emp.id}
+                            employee={emp}
+                            isDragging={Number(draggingEmployeeId) === Number(emp.id)}
+                            onDragStart={onDragStartEmployee}
+                            onDragEnd={onDragEndEmployee}
+                            onEdit={() => startEditEmployee(emp)}
+                          />
+                        ))
+                      ) : (
+                        <div style={emptyGroupBox}>Drop employees here</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </>
@@ -1393,7 +1637,7 @@ export default function App() {
               title="System Change Logs"
               value={searchLogs}
               onChange={setSearchLogs}
-              placeholder="Search logs..."
+              placeholder="Filter logs..."
               onExportExcel={() =>
                 exportRowsToExcel(
                   filteredLogs.map((log) => ({
@@ -1410,43 +1654,77 @@ export default function App() {
               onPrint={printCurrentPage}
             />
 
-            <div className="print-area">
-              <div className="print-report-title">System Change Logs</div>
-              <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
-              <div className="print-table-wrap" style={tableWrap}>
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>Date & Time</th>
-                      <th style={thStyle}>Entity Type</th>
-                      <th style={thStyle}>Entity ID</th>
-                      <th style={thStyle}>Action</th>
-                      <th style={thStyle}>Details</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.length > 0 ? (
-                      filteredLogs.map((log) => (
-                        <tr key={log.id}>
-                          <td style={tdStyle}>{log.created_at}</td>
-                          <td style={tdStyle}>{log.entity_type}</td>
-                          <td style={tdStyle}>{log.entity_id}</td>
-                          <td style={tdStyle}>{log.action}</td>
-                          <td style={tdStyle}>{log.details}</td>
-                        </tr>
-                      ))
-                    ) : (
+            <div className="print-page-shell">
+              <div className="print-area">
+                <div className="print-report-title">System Change Logs</div>
+                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <div className="print-table-wrap" style={tableWrap}>
+                  <table style={tableStyle}>
+                    <thead>
                       <tr>
-                        <td style={emptyTd} colSpan="5">No logs found</td>
+                        <th style={thStyle}>Date & Time</th>
+                        <th style={thStyle}>Entity Type</th>
+                        <th style={thStyle}>Entity ID</th>
+                        <th style={thStyle}>Action</th>
+                        <th style={thStyle}>Details</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredLogs.length > 0 ? (
+                        filteredLogs.map((log) => (
+                          <tr key={log.id}>
+                            <td style={tdStyle}>{log.created_at}</td>
+                            <td style={tdStyle}>{log.entity_type}</td>
+                            <td style={tdStyle}>{log.entity_id}</td>
+                            <td style={tdStyle}>{log.action}</td>
+                            <td style={tdStyle}>{log.details}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td style={emptyTd} colSpan="5">No logs found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd, onEdit }) {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(employee.id)}
+      onDragEnd={onDragEnd}
+      style={{
+        ...employeeDragCard,
+        opacity: isDragging ? 0.45 : 1,
+        cursor: "grab"
+      }}
+    >
+      <div style={employeeCardTopRow}>
+        <div>
+          <div style={employeeCardName}>{employee.name_en || "No Name"}</div>
+          <div style={employeeCardMeta}>{employee.emp_no || "No Emp No"}</div>
+        </div>
+        <button type="button" onClick={onEdit} style={{ ...miniButton, background: buttonWarning }}>
+          Edit
+        </button>
+      </div>
+      <div style={employeeCardBadgeRow}>
+        <span style={employeeBadge}>{employee.designation || "No Designation"}</span>
+        <span style={employeeBadgeMuted}>{employee.shift || "No Shift"}</span>
+      </div>
+      <div style={employeeCardInfo}>Rig: {employee.rig_no || "-"}</div>
+      <div style={employeeCardInfo}>Status: {employee.status || "-"}</div>
+      <div style={employeeCardInfo}>Current Project: {employee.current_project || "Unassigned"}</div>
     </div>
   );
 }
@@ -1515,10 +1793,10 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #2dd4bf, #2563eb); border-radius: 999px; }
 ::selection { background: rgba(45, 212, 191, 0.35); }
 @page { size: A4 portrait; margin: 10mm; }
-@media (max-width: 1100px) {
+@media (max-width: 1300px) {
   .responsive-grid-6 { grid-template-columns: repeat(2, 1fr) !important; }
 }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .responsive-grid-4, .responsive-grid-3, .responsive-grid-2 { grid-template-columns: 1fr !important; }
 }
 @media print {
@@ -1534,17 +1812,25 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
     visibility: hidden !important;
   }
 
+  .print-page-shell,
+  .print-page-shell *,
   .print-area,
   .print-area * {
     visibility: visible !important;
   }
 
+  .print-page-shell {
+    width: 100% !important;
+    display: block !important;
+  }
+
   .print-area {
     position: static !important;
-    width: 100% !important;
+    width: 190mm !important;
+    max-width: 190mm !important;
     background: #ffffff !important;
     color: #000000 !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     overflow: visible !important;
   }
@@ -1554,6 +1840,7 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   }
 
   .print-table-wrap {
+    width: 100% !important;
     overflow: visible !important;
     box-shadow: none !important;
     border-radius: 0 !important;
@@ -1677,7 +1964,7 @@ const backgroundGlowTwo = {
 };
 
 const containerStyle = {
-  maxWidth: 1600,
+  maxWidth: 1700,
   margin: "0 auto",
   position: "relative",
   zIndex: 2
@@ -1783,3 +2070,106 @@ const designationGroupCard = { background: "rgba(255,255,255,0.03)", border: "1p
 const designationHeader = { marginBottom: 12, padding: "4px 2px" };
 const designationHeaderTitle = { textAlign: "center", color: "#ffffff", fontSize: 24, fontWeight: 800, textDecoration: "underline", letterSpacing: "0.02em" };
 const emptyGroupBox = { padding: 30, borderRadius: 18, textAlign: "center", color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.14)", fontWeight: 700 };
+
+const adminLayout = {
+  display: "grid",
+  gridTemplateColumns: "380px 1fr",
+  gap: 18,
+  alignItems: "start"
+};
+
+const adminProjectsGrid = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+  gap: 18,
+  alignItems: "start"
+};
+
+const adminColumnHeader = {
+  padding: "14px 16px",
+  borderRadius: 16,
+  marginBottom: 14,
+  background: "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(14,165,233,0.14))",
+  border: "1px solid rgba(96,165,250,0.18)",
+  color: "#ffffff",
+  fontWeight: 800,
+  fontSize: 16
+};
+
+const adminColumnMeta = {
+  marginTop: 6,
+  fontSize: 12,
+  color: "#cbd5e1",
+  fontWeight: 600
+};
+
+const adminCardsWrap = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12
+};
+
+const employeeDragCard = {
+  background: "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))",
+  border: "1px solid rgba(203,213,225,0.85)",
+  borderRadius: 18,
+  padding: 14,
+  color: "#0f172a",
+  boxShadow: "0 10px 24px rgba(15,23,42,0.14)"
+};
+
+const employeeCardTopRow = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 8,
+  alignItems: "flex-start",
+  marginBottom: 10
+};
+
+const employeeCardName = {
+  fontWeight: 800,
+  fontSize: 15,
+  color: "#0f172a"
+};
+
+const employeeCardMeta = {
+  marginTop: 4,
+  fontSize: 12,
+  color: "#475569",
+  fontWeight: 700
+};
+
+const employeeCardBadgeRow = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  marginBottom: 10
+};
+
+const employeeBadge = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "rgba(37,99,235,0.12)",
+  color: "#1d4ed8",
+  fontSize: 12,
+  fontWeight: 800
+};
+
+const employeeBadgeMuted = {
+  display: "inline-flex",
+  alignItems: "center",
+  padding: "6px 10px",
+  borderRadius: 999,
+  background: "rgba(15,23,42,0.07)",
+  color: "#334155",
+  fontSize: 12,
+  fontWeight: 700
+};
+
+const employeeCardInfo = {
+  fontSize: 13,
+  color: "#334155",
+  lineHeight: 1.6
+};
