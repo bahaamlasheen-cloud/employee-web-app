@@ -1,12 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { createClient } from "@supabase/supabase-js";
 
-const STORAGE_KEYS = {
-  employees: "ems_employees",
-  projects: "ems_projects",
-  assignments: "ems_assignments",
-  workEntries: "ems_work_entries",
-  logs: "ems_logs"
+const supabaseUrl = "https://tmyacneqvgkklpyzkvpb.supabase.co";
+const supabaseKey = "sb_publishable_IZawtl7HPIlQZTrH-ZS-ZA_i3znihI4";
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+const TABLES = {
+  employees: "employees",
+  projects: "projects",
+  assignments: "assignments",
+  workEntries: "work_entries",
+  logs: "logs"
 };
 
 const emptyEmployee = {
@@ -57,33 +62,8 @@ function nowStamp() {
   return `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
 }
 
-function readRows(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || "[]");
-  } catch {
-    return [];
-  }
-}
-
-function writeRows(key, rows) {
-  localStorage.setItem(key, JSON.stringify(rows));
-}
-
 function uid() {
   return Date.now() + Math.floor(Math.random() * 100000);
-}
-
-function logChange(entityType, entityId, action, details) {
-  const logs = readRows(STORAGE_KEYS.logs);
-  logs.unshift({
-    id: uid(),
-    entity_type: entityType,
-    entity_id: String(entityId ?? ""),
-    action,
-    details,
-    created_at: nowStamp()
-  });
-  writeRows(STORAGE_KEYS.logs, logs);
 }
 
 function exportRowsToExcel(rows, sheetName, fileName) {
@@ -93,18 +73,82 @@ function exportRowsToExcel(rows, sheetName, fileName) {
   XLSX.writeFile(workbook, `${fileName || "export"}.xlsx`);
 }
 
-function downloadJsonBackup() {
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function fetchRows(table, orderBy = "id", ascending = false) {
+  const { data, error } = await supabase.from(table).select("*").order(orderBy, { ascending });
+  if (error) throw error;
+  return data || [];
+}
+
+async function fetchMaybeSingle(table, column, value) {
+  const { data, error } = await supabase.from(table).select("*").eq(column, value).maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+async function logChange(entityType, entityId, action, details) {
+  const { error } = await supabase.from(TABLES.logs).insert([
+    {
+      id: uid(),
+      entity_type: entityType,
+      entity_id: String(entityId ?? ""),
+      action,
+      details,
+      created_at: nowStamp()
+    }
+  ]);
+  if (error) throw error;
+}
+
+async function deleteAllRows(table) {
+  const { error } = await supabase.from(table).delete().gte("id", 0);
+  if (error) throw error;
+}
+
+async function insertRows(table, rows) {
+  if (!rows?.length) return;
+  const { error } = await supabase.from(table).insert(rows);
+  if (error) throw error;
+}
+
+async function replaceAllData(payload) {
+  await deleteAllRows(TABLES.workEntries);
+  await deleteAllRows(TABLES.assignments);
+  await deleteAllRows(TABLES.logs);
+  await deleteAllRows(TABLES.employees);
+  await deleteAllRows(TABLES.projects);
+
+  await insertRows(TABLES.employees, Array.isArray(payload.employees) ? payload.employees : []);
+  await insertRows(TABLES.projects, Array.isArray(payload.projects) ? payload.projects : []);
+  await insertRows(TABLES.assignments, Array.isArray(payload.assignments) ? payload.assignments : []);
+  await insertRows(TABLES.workEntries, Array.isArray(payload.workEntries) ? payload.workEntries : []);
+  await insertRows(TABLES.logs, Array.isArray(payload.logs) ? payload.logs : []);
+}
+
+async function downloadJsonBackup() {
+  const [employees, projects, assignments, workEntries, logs] = await Promise.all([
+    fetchRows(TABLES.employees),
+    fetchRows(TABLES.projects),
+    fetchRows(TABLES.assignments),
+    fetchRows(TABLES.workEntries),
+    fetchRows(TABLES.logs, "created_at", false)
+  ]);
+
   const payload = {
-    employees: readRows(STORAGE_KEYS.employees),
-    projects: readRows(STORAGE_KEYS.projects),
-    assignments: readRows(STORAGE_KEYS.assignments),
-    workEntries: readRows(STORAGE_KEYS.workEntries),
-    logs: readRows(STORAGE_KEYS.logs)
+    employees,
+    projects,
+    assignments,
+    workEntries,
+    logs
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json"
   });
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -113,16 +157,18 @@ function downloadJsonBackup() {
   URL.revokeObjectURL(url);
 }
 
-function normalizeText(value) {
-  return String(value || "").trim().toLowerCase();
+async function getEmployeeAssignment(employeeId) {
+  return await fetchMaybeSingle(TABLES.assignments, "employee_id", Number(employeeId));
 }
 
-function enrichData() {
-  const employeesRaw = readRows(STORAGE_KEYS.employees);
-  const projectsRaw = readRows(STORAGE_KEYS.projects);
-  const assignmentsRaw = readRows(STORAGE_KEYS.assignments);
-  const workEntriesRaw = readRows(STORAGE_KEYS.workEntries);
-  const logsRaw = readRows(STORAGE_KEYS.logs);
+async function enrichData() {
+  const [employeesRaw, projectsRaw, assignmentsRaw, workEntriesRaw, logsRaw] = await Promise.all([
+    fetchRows(TABLES.employees),
+    fetchRows(TABLES.projects),
+    fetchRows(TABLES.assignments, "assigned_at", false),
+    fetchRows(TABLES.workEntries, "work_date", false),
+    fetchRows(TABLES.logs, "created_at", false)
+  ]);
 
   const assignmentByEmployeeId = new Map(assignmentsRaw.map((a) => [Number(a.employee_id), a]));
   const projectById = new Map(projectsRaw.map((p) => [Number(p.id), p]));
@@ -148,6 +194,7 @@ function enrichData() {
       const employee = employeeById.get(Number(a.employee_id));
       const project = projectById.get(Number(a.project_id));
       if (!employee || !project) return null;
+
       return {
         ...a,
         emp_no: employee.emp_no,
@@ -156,8 +203,13 @@ function enrichData() {
         designation: employee.designation,
         shift: employee.shift,
         rig_no: employee.rig_no,
+        camp_no: employee.camp_no,
+        room_no: employee.room_no,
+        status: employee.status,
+        employee_notes: employee.notes,
         project_name: project.project_name,
-        project_code: project.project_code
+        project_code: project.project_code,
+        location: project.location
       };
     })
     .filter(Boolean)
@@ -225,10 +277,6 @@ function enrichData() {
   };
 }
 
-function getEmployeeAssignment(employeeId) {
-  return readRows(STORAGE_KEYS.assignments).find((row) => Number(row.employee_id) === Number(employeeId)) || null;
-}
-
 export default function App() {
   const employeeImportRef = useRef(null);
   const backupImportRef = useRef(null);
@@ -273,16 +321,25 @@ export default function App() {
 
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [isEditingProject, setIsEditingProject] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const refreshAll = () => {
-    const data = enrichData();
-    setEmployees(data.employees);
-    setProjects(data.projects);
-    setAssignments(data.assignments);
-    setWorkEntries(data.workEntries);
-    setHoursSummary(data.hoursSummary);
-    setLogs(data.logs);
-    setStats(data.stats);
+  const refreshAll = async () => {
+    try {
+      setIsLoading(true);
+      const data = await enrichData();
+      setEmployees(data.employees);
+      setProjects(data.projects);
+      setAssignments(data.assignments);
+      setWorkEntries(data.workEntries);
+      setHoursSummary(data.hoursSummary);
+      setLogs(data.logs);
+      setStats(data.stats);
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to load data: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -295,25 +352,25 @@ export default function App() {
       return;
     }
 
-    const employeesRaw = readRows(STORAGE_KEYS.employees);
-    const assignmentsRaw = readRows(STORAGE_KEYS.assignments);
-    const employeesMap = new Map(employeesRaw.map((e) => [Number(e.id), e]));
-
-    const rows = assignmentsRaw
+    const rows = assignments
       .filter((a) => Number(a.project_id) === Number(selectedProjectId))
-      .map((a) => {
-        const emp = employeesMap.get(Number(a.employee_id));
-        if (!emp) return null;
-        return {
-          ...emp,
-          assigned_at: a.assigned_at,
-          assignment_notes: a.notes || ""
-        };
-      })
-      .filter(Boolean);
+      .map((a) => ({
+        id: a.employee_id,
+        emp_no: a.emp_no,
+        name_en: a.name_en,
+        name_ar: a.name_ar,
+        designation: a.designation,
+        shift: a.shift,
+        camp_no: a.camp_no,
+        room_no: a.room_no,
+        rig_no: a.rig_no,
+        status: a.status,
+        assigned_at: a.assigned_at,
+        assignment_notes: a.notes || ""
+      }));
 
     setSelectedProjectEmployees(rows);
-  }, [selectedProjectId, employees, assignments]);
+  }, [selectedProjectId, assignments]);
 
   const handleEmployeeChange = (e) => {
     const { name, value } = e.target;
@@ -345,47 +402,66 @@ export default function App() {
     setIsEditingProject(false);
   };
 
-  const saveEmployee = () => {
-    if (!employeeForm.emp_no.trim() || !employeeForm.name_en.trim() || !employeeForm.designation.trim()) {
-      alert("Please enter Emp No, Employee Name EN, and Designation.");
-      return;
-    }
+  const saveEmployee = async () => {
+    try {
+      if (!employeeForm.emp_no.trim() || !employeeForm.name_en.trim() || !employeeForm.designation.trim()) {
+        alert("Please enter Emp No, Employee Name EN, and Designation.");
+        return;
+      }
 
-    const rows = readRows(STORAGE_KEYS.employees);
-
-    const duplicate = rows.find(
-      (row) => String(row.emp_no).trim() === String(employeeForm.emp_no).trim() && Number(row.id) !== Number(employeeForm.id)
-    );
-
-    if (duplicate) {
-      alert("Emp No already exists.");
-      return;
-    }
-
-    if (isEditingEmployee) {
-      const updated = rows.map((row) =>
-        Number(row.id) === Number(employeeForm.id)
-          ? { ...row, ...employeeForm, updated_at: nowStamp() }
-          : row
+      const rows = await fetchRows(TABLES.employees);
+      const duplicate = rows.find(
+        (row) =>
+          String(row.emp_no).trim() === String(employeeForm.emp_no).trim() &&
+          Number(row.id) !== Number(employeeForm.id)
       );
-      writeRows(STORAGE_KEYS.employees, updated);
-      logChange("employee", employeeForm.id, "UPDATE", `Updated employee ${employeeForm.emp_no} - ${employeeForm.name_en}`);
-      alert("Employee updated successfully.");
-    } else {
-      const row = {
-        ...employeeForm,
-        id: uid(),
-        created_at: nowStamp(),
-        updated_at: nowStamp()
-      };
-      rows.unshift(row);
-      writeRows(STORAGE_KEYS.employees, rows);
-      logChange("employee", row.id, "CREATE", `Added employee ${row.emp_no} - ${row.name_en}`);
-      alert("Employee added successfully.");
-    }
 
-    resetEmployeeForm();
-    refreshAll();
+      if (duplicate) {
+        alert("Emp No already exists.");
+        return;
+      }
+
+      if (isEditingEmployee) {
+        const payload = {
+          emp_no: employeeForm.emp_no,
+          name_en: employeeForm.name_en,
+          name_ar: employeeForm.name_ar,
+          designation: employeeForm.designation,
+          rig_no: employeeForm.rig_no,
+          shift: employeeForm.shift,
+          camp_no: employeeForm.camp_no,
+          room_no: employeeForm.room_no,
+          status: employeeForm.status,
+          notes: employeeForm.notes,
+          updated_at: nowStamp()
+        };
+
+        const { error } = await supabase.from(TABLES.employees).update(payload).eq("id", employeeForm.id);
+        if (error) throw error;
+
+        await logChange("employee", employeeForm.id, "UPDATE", `Updated employee ${employeeForm.emp_no} - ${employeeForm.name_en}`);
+        alert("Employee updated successfully.");
+      } else {
+        const row = {
+          ...employeeForm,
+          id: uid(),
+          created_at: nowStamp(),
+          updated_at: nowStamp()
+        };
+
+        const { error } = await supabase.from(TABLES.employees).insert([row]);
+        if (error) throw error;
+
+        await logChange("employee", row.id, "CREATE", `Added employee ${row.emp_no} - ${row.name_en}`);
+        alert("Employee added successfully.");
+      }
+
+      resetEmployeeForm();
+      await refreshAll();
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to save employee: ${error.message}`);
+    }
   };
 
   const startEditEmployee = (emp) => {
@@ -407,65 +483,87 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const deleteEmployee = (id) => {
-    const ok = window.confirm("Are you sure you want to delete this employee?");
-    if (!ok) return;
+  const deleteEmployee = async (id) => {
+    try {
+      const ok = window.confirm("Are you sure you want to delete this employee?");
+      if (!ok) return;
 
-    const rows = readRows(STORAGE_KEYS.employees).filter((row) => Number(row.id) !== Number(id));
-    writeRows(STORAGE_KEYS.employees, rows);
+      const [{ error: workError }, { error: assignError }, { error: empError }] = await Promise.all([
+        supabase.from(TABLES.workEntries).delete().eq("employee_id", id),
+        supabase.from(TABLES.assignments).delete().eq("employee_id", id),
+        supabase.from(TABLES.employees).delete().eq("id", id)
+      ]);
 
-    const assignmentsRows = readRows(STORAGE_KEYS.assignments).filter((a) => Number(a.employee_id) !== Number(id));
-    writeRows(STORAGE_KEYS.assignments, assignmentsRows);
+      if (workError) throw workError;
+      if (assignError) throw assignError;
+      if (empError) throw empError;
 
-    const workRows = readRows(STORAGE_KEYS.workEntries).filter((w) => Number(w.employee_id) !== Number(id));
-    writeRows(STORAGE_KEYS.workEntries, workRows);
+      await logChange("employee", id, "DELETE", `Deleted employee ID ${id}`);
 
-    logChange("employee", id, "DELETE", `Deleted employee ID ${id}`);
-    if (Number(employeeForm.id) === Number(id)) resetEmployeeForm();
-    refreshAll();
-    alert("Employee deleted successfully.");
+      if (Number(employeeForm.id) === Number(id)) resetEmployeeForm();
+      await refreshAll();
+      alert("Employee deleted successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to delete employee: ${error.message}`);
+    }
   };
 
-  const saveProject = () => {
-    if (!projectForm.project_name.trim()) {
-      alert("Please enter Project Name.");
-      return;
-    }
+  const saveProject = async () => {
+    try {
+      if (!projectForm.project_name.trim()) {
+        alert("Please enter Project Name.");
+        return;
+      }
 
-    const rows = readRows(STORAGE_KEYS.projects);
-    const duplicate = rows.find(
-      (row) => row.project_name.trim().toLowerCase() === projectForm.project_name.trim().toLowerCase() && Number(row.id) !== Number(projectForm.id)
-    );
-
-    if (duplicate) {
-      alert("Project name already exists.");
-      return;
-    }
-
-    if (isEditingProject) {
-      const updated = rows.map((row) =>
-        Number(row.id) === Number(projectForm.id)
-          ? { ...row, ...projectForm, updated_at: nowStamp() }
-          : row
+      const rows = await fetchRows(TABLES.projects);
+      const duplicate = rows.find(
+        (row) =>
+          row.project_name.trim().toLowerCase() === projectForm.project_name.trim().toLowerCase() &&
+          Number(row.id) !== Number(projectForm.id)
       );
-      writeRows(STORAGE_KEYS.projects, updated);
-      logChange("project", projectForm.id, "UPDATE", `Updated project ${projectForm.project_name}`);
-      alert("Project updated successfully.");
-    } else {
-      const row = {
-        ...projectForm,
-        id: uid(),
-        created_at: nowStamp(),
-        updated_at: nowStamp()
-      };
-      rows.unshift(row);
-      writeRows(STORAGE_KEYS.projects, rows);
-      logChange("project", row.id, "CREATE", `Added project ${row.project_name}`);
-      alert("Project added successfully.");
-    }
 
-    resetProjectForm();
-    refreshAll();
+      if (duplicate) {
+        alert("Project name already exists.");
+        return;
+      }
+
+      if (isEditingProject) {
+        const payload = {
+          project_name: projectForm.project_name,
+          project_code: projectForm.project_code,
+          location: projectForm.location,
+          status: projectForm.status,
+          notes: projectForm.notes,
+          updated_at: nowStamp()
+        };
+
+        const { error } = await supabase.from(TABLES.projects).update(payload).eq("id", projectForm.id);
+        if (error) throw error;
+
+        await logChange("project", projectForm.id, "UPDATE", `Updated project ${projectForm.project_name}`);
+        alert("Project updated successfully.");
+      } else {
+        const row = {
+          ...projectForm,
+          id: uid(),
+          created_at: nowStamp(),
+          updated_at: nowStamp()
+        };
+
+        const { error } = await supabase.from(TABLES.projects).insert([row]);
+        if (error) throw error;
+
+        await logChange("project", row.id, "CREATE", `Added project ${row.project_name}`);
+        alert("Project added successfully.");
+      }
+
+      resetProjectForm();
+      await refreshAll();
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to save project: ${error.message}`);
+    }
   };
 
   const startEditProject = (project) => {
@@ -482,35 +580,46 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const deleteProject = (id) => {
-    const ok = window.confirm("Are you sure you want to delete this project?");
-    if (!ok) return;
+  const deleteProject = async (id) => {
+    try {
+      const ok = window.confirm("Are you sure you want to delete this project?");
+      if (!ok) return;
 
-    const rows = readRows(STORAGE_KEYS.projects).filter((row) => Number(row.id) !== Number(id));
-    writeRows(STORAGE_KEYS.projects, rows);
+      const [{ error: workError }, { error: assignError }, { error: projError }] = await Promise.all([
+        supabase.from(TABLES.workEntries).delete().eq("project_id", id),
+        supabase.from(TABLES.assignments).delete().eq("project_id", id),
+        supabase.from(TABLES.projects).delete().eq("id", id)
+      ]);
 
-    const assignmentsRows = readRows(STORAGE_KEYS.assignments).filter((a) => Number(a.project_id) !== Number(id));
-    writeRows(STORAGE_KEYS.assignments, assignmentsRows);
+      if (workError) throw workError;
+      if (assignError) throw assignError;
+      if (projError) throw projError;
 
-    const workRows = readRows(STORAGE_KEYS.workEntries).filter((w) => Number(w.project_id) !== Number(id));
-    writeRows(STORAGE_KEYS.workEntries, workRows);
+      await logChange("project", id, "DELETE", `Deleted project ID ${id}`);
 
-    logChange("project", id, "DELETE", `Deleted project ID ${id}`);
+      if (Number(selectedProjectId) === Number(id)) {
+        setSelectedProjectId("");
+        setSelectedProjectEmployees([]);
+      }
+      if (Number(projectForm.id) === Number(id)) resetProjectForm();
 
-    if (Number(selectedProjectId) === Number(id)) {
-      setSelectedProjectId("");
-      setSelectedProjectEmployees([]);
+      await refreshAll();
+      alert("Project deleted successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to delete project: ${error.message}`);
     }
-    if (Number(projectForm.id) === Number(id)) resetProjectForm();
-    refreshAll();
-    alert("Project deleted successfully.");
   };
 
-  const upsertAssignment = (employeeId, projectId, noteText = "") => {
-    const rows = readRows(STORAGE_KEYS.assignments);
+  const upsertAssignment = async (employeeId, projectId, noteText = "") => {
+    const rows = await fetchRows(TABLES.assignments);
     const existing = rows.find((row) => Number(row.employee_id) === Number(employeeId));
-    const projectsRows = readRows(STORAGE_KEYS.projects);
-    const employeesRows = readRows(STORAGE_KEYS.employees);
+
+    const [projectsRows, employeesRows] = await Promise.all([
+      fetchRows(TABLES.projects),
+      fetchRows(TABLES.employees)
+    ]);
+
     const project = projectsRows.find((p) => Number(p.id) === Number(projectId));
     const employee = employeesRows.find((e) => Number(e.id) === Number(employeeId));
 
@@ -521,33 +630,37 @@ export default function App() {
 
     if (existing) {
       const oldProject = projectsRows.find((p) => Number(p.id) === Number(existing.project_id));
-      const updated = rows.map((row) =>
-        Number(row.employee_id) === Number(employeeId)
-          ? {
-              ...row,
-              project_id: Number(projectId),
-              notes: noteText || row.notes || "",
-              assigned_at: nowStamp()
-            }
-          : row
-      );
-      writeRows(STORAGE_KEYS.assignments, updated);
-      logChange(
+
+      const { error } = await supabase
+        .from(TABLES.assignments)
+        .update({
+          project_id: Number(projectId),
+          notes: noteText || existing.notes || "",
+          assigned_at: nowStamp()
+        })
+        .eq("employee_id", Number(employeeId));
+
+      if (error) throw error;
+
+      await logChange(
         "assignment",
         employeeId,
         "TRANSFER",
         `Transferred ${employee?.name_en || "employee"} from ${oldProject?.project_name || "Unassigned"} to ${project?.project_name || "project"}`
       );
     } else {
-      rows.unshift({
+      const row = {
         id: uid(),
         employee_id: Number(employeeId),
         project_id: Number(projectId),
         assigned_at: nowStamp(),
         notes: noteText || ""
-      });
-      writeRows(STORAGE_KEYS.assignments, rows);
-      logChange(
+      };
+
+      const { error } = await supabase.from(TABLES.assignments).insert([row]);
+      if (error) throw error;
+
+      await logChange(
         "assignment",
         employeeId,
         "ASSIGN",
@@ -555,72 +668,95 @@ export default function App() {
       );
     }
 
-    refreshAll();
+    await refreshAll();
   };
 
-  const saveAssignment = () => {
-    if (!assignmentForm.employee_id || !assignmentForm.project_id) {
-      alert("Please select employee and project.");
-      return;
+  const saveAssignment = async () => {
+    try {
+      if (!assignmentForm.employee_id || !assignmentForm.project_id) {
+        alert("Please select employee and project.");
+        return;
+      }
+
+      await upsertAssignment(assignmentForm.employee_id, assignmentForm.project_id, assignmentForm.notes || "");
+      setAssignmentForm(emptyAssignment);
+      alert("Employee assigned successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to assign employee: ${error.message}`);
     }
-
-    upsertAssignment(assignmentForm.employee_id, assignmentForm.project_id, assignmentForm.notes || "");
-    setAssignmentForm(emptyAssignment);
-    alert("Employee assigned successfully.");
   };
 
-  const unassignEmployee = (employeeId) => {
-    const ok = window.confirm("Remove this employee from the current project?");
-    if (!ok) return;
+  const unassignEmployee = async (employeeId) => {
+    try {
+      const ok = window.confirm("Remove this employee from the current project?");
+      if (!ok) return;
 
-    const rows = readRows(STORAGE_KEYS.assignments).filter((row) => Number(row.employee_id) !== Number(employeeId));
-    writeRows(STORAGE_KEYS.assignments, rows);
-    logChange("assignment", employeeId, "UNASSIGN", `Unassigned employee ID ${employeeId}`);
-    refreshAll();
-    alert("Employee unassigned successfully.");
-  };
+      const { error } = await supabase.from(TABLES.assignments).delete().eq("employee_id", Number(employeeId));
+      if (error) throw error;
 
-  const saveWorkEntry = () => {
-    if (!workEntryForm.employee_id || !workEntryForm.work_date) {
-      alert("Please select employee and work date.");
-      return;
+      await logChange("assignment", employeeId, "UNASSIGN", `Unassigned employee ID ${employeeId}`);
+      await refreshAll();
+      alert("Employee unassigned successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to unassign employee: ${error.message}`);
     }
-
-    const assignmentsRows = readRows(STORAGE_KEYS.assignments);
-    const assignment = assignmentsRows.find((a) => Number(a.employee_id) === Number(workEntryForm.employee_id));
-
-    if (!assignment) {
-      alert("This employee is not assigned to any project.");
-      return;
-    }
-
-    const rows = readRows(STORAGE_KEYS.workEntries);
-    rows.unshift({
-      id: uid(),
-      employee_id: Number(workEntryForm.employee_id),
-      project_id: Number(assignment.project_id),
-      work_date: workEntryForm.work_date,
-      regular_hours: Number(workEntryForm.regular_hours || 0),
-      overtime_hours: Number(workEntryForm.overtime_hours || 0),
-      notes: workEntryForm.notes || "",
-      created_at: nowStamp()
-    });
-
-    writeRows(STORAGE_KEYS.workEntries, rows);
-    logChange("work_entry", workEntryForm.employee_id, "CREATE", `Added hours on ${workEntryForm.work_date}`);
-    setWorkEntryForm(emptyWorkEntry);
-    refreshAll();
-    alert("Work entry saved successfully.");
   };
 
-  const deleteWorkEntry = (id) => {
-    const ok = window.confirm("Delete this work entry?");
-    if (!ok) return;
-    const rows = readRows(STORAGE_KEYS.workEntries).filter((row) => Number(row.id) !== Number(id));
-    writeRows(STORAGE_KEYS.workEntries, rows);
-    logChange("work_entry", id, "DELETE", `Deleted work entry ID ${id}`);
-    refreshAll();
-    alert("Work entry deleted successfully.");
+  const saveWorkEntry = async () => {
+    try {
+      if (!workEntryForm.employee_id || !workEntryForm.work_date) {
+        alert("Please select employee and work date.");
+        return;
+      }
+
+      const assignment = await getEmployeeAssignment(workEntryForm.employee_id);
+
+      if (!assignment) {
+        alert("This employee is not assigned to any project.");
+        return;
+      }
+
+      const row = {
+        id: uid(),
+        employee_id: Number(workEntryForm.employee_id),
+        project_id: Number(assignment.project_id),
+        work_date: workEntryForm.work_date,
+        regular_hours: Number(workEntryForm.regular_hours || 0),
+        overtime_hours: Number(workEntryForm.overtime_hours || 0),
+        notes: workEntryForm.notes || "",
+        created_at: nowStamp()
+      };
+
+      const { error } = await supabase.from(TABLES.workEntries).insert([row]);
+      if (error) throw error;
+
+      await logChange("work_entry", workEntryForm.employee_id, "CREATE", `Added hours on ${workEntryForm.work_date}`);
+      setWorkEntryForm(emptyWorkEntry);
+      await refreshAll();
+      alert("Work entry saved successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to save work entry: ${error.message}`);
+    }
+  };
+
+  const deleteWorkEntry = async (id) => {
+    try {
+      const ok = window.confirm("Delete this work entry?");
+      if (!ok) return;
+
+      const { error } = await supabase.from(TABLES.workEntries).delete().eq("id", Number(id));
+      if (error) throw error;
+
+      await logChange("work_entry", id, "DELETE", `Deleted work entry ID ${id}`);
+      await refreshAll();
+      alert("Work entry deleted successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to delete work entry: ${error.message}`);
+    }
   };
 
   const handleImportEmployees = async (e) => {
@@ -634,13 +770,13 @@ export default function App() {
       const sheet = workbook.Sheets[firstSheetName];
       const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-      const existing = readRows(STORAGE_KEYS.employees);
+      const existing = await fetchRows(TABLES.employees);
       let added = 0;
       let updated = 0;
 
-      json.forEach((row) => {
+      for (const row of json) {
         const empNo = String(row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || "").trim();
-        if (!empNo) return;
+        if (!empNo) continue;
 
         const payload = {
           emp_no: empNo,
@@ -655,30 +791,39 @@ export default function App() {
           notes: String(row.notes || row["Notes"] || "").trim()
         };
 
-        const index = existing.findIndex((item) => String(item.emp_no).trim() === empNo);
-        if (index >= 0) {
-          existing[index] = {
-            ...existing[index],
-            ...payload,
-            updated_at: nowStamp()
-          };
+        const found = existing.find((item) => String(item.emp_no).trim() === empNo);
+
+        if (found) {
+          const { error } = await supabase
+            .from(TABLES.employees)
+            .update({
+              ...payload,
+              updated_at: nowStamp()
+            })
+            .eq("id", found.id);
+
+          if (error) throw error;
           updated += 1;
         } else {
-          existing.unshift({
-            id: uid(),
-            ...payload,
-            created_at: nowStamp(),
-            updated_at: nowStamp()
-          });
+          const { error } = await supabase.from(TABLES.employees).insert([
+            {
+              id: uid(),
+              ...payload,
+              created_at: nowStamp(),
+              updated_at: nowStamp()
+            }
+          ]);
+
+          if (error) throw error;
           added += 1;
         }
-      });
+      }
 
-      writeRows(STORAGE_KEYS.employees, existing);
-      logChange("employee", "bulk", "IMPORT", `Imported employees from Excel. Added: ${added}, Updated: ${updated}`);
-      refreshAll();
+      await logChange("employee", "bulk", "IMPORT", `Imported employees from Excel. Added: ${added}, Updated: ${updated}`);
+      await refreshAll();
       alert(`Import completed. Added: ${added}, Updated: ${updated}`);
     } catch (error) {
+      console.error(error);
       alert(`Import failed: ${error.message}`);
     }
 
@@ -692,14 +837,11 @@ export default function App() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      writeRows(STORAGE_KEYS.employees, Array.isArray(data.employees) ? data.employees : []);
-      writeRows(STORAGE_KEYS.projects, Array.isArray(data.projects) ? data.projects : []);
-      writeRows(STORAGE_KEYS.assignments, Array.isArray(data.assignments) ? data.assignments : []);
-      writeRows(STORAGE_KEYS.workEntries, Array.isArray(data.workEntries) ? data.workEntries : []);
-      writeRows(STORAGE_KEYS.logs, Array.isArray(data.logs) ? data.logs : []);
-      refreshAll();
+      await replaceAllData(data);
+      await refreshAll();
       alert("Backup restored successfully.");
     } catch (error) {
+      console.error(error);
       alert(`Restore failed: ${error.message}`);
     }
 
@@ -844,18 +986,28 @@ export default function App() {
     setAdminHighlightProjectId(null);
   };
 
-  const onDropToProject = (projectId) => {
+  const onDropToProject = async (projectId) => {
     if (!draggingEmployeeId) return;
-    upsertAssignment(draggingEmployeeId, projectId, "Moved from admin drag & drop");
-    setDraggingEmployeeId(null);
-    setAdminHighlightProjectId(null);
+    try {
+      await upsertAssignment(draggingEmployeeId, projectId, "Moved from admin drag & drop");
+      setDraggingEmployeeId(null);
+      setAdminHighlightProjectId(null);
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to move employee: ${error.message}`);
+    }
   };
 
-  const onDropToUnassigned = () => {
+  const onDropToUnassigned = async () => {
     if (!draggingEmployeeId) return;
-    unassignEmployee(draggingEmployeeId);
-    setDraggingEmployeeId(null);
-    setAdminHighlightProjectId(null);
+    try {
+      await unassignEmployee(draggingEmployeeId);
+      setDraggingEmployeeId(null);
+      setAdminHighlightProjectId(null);
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to unassign employee: ${error.message}`);
+    }
   };
 
   return (
@@ -870,15 +1022,25 @@ export default function App() {
           <div style={heroBadge}>Web App Version</div>
           <h1 style={heroTitle}>Employee Management & Allocation System</h1>
           <p style={heroSubtitle}>
-            Browser-based app with Local Storage, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
+            Browser-based app with Supabase, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
           </p>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 16 }}>
-            <button type="button" onClick={downloadJsonBackup} style={{ ...buttonStyle, background: buttonSuccess }}>
+            <button
+              type="button"
+              onClick={downloadJsonBackup}
+              style={{ ...buttonStyle, background: buttonSuccess }}
+              disabled={isLoading}
+            >
               Backup JSON
             </button>
             <input ref={backupImportRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImportBackup} />
-            <button type="button" onClick={() => backupImportRef.current?.click()} style={{ ...buttonStyle, background: buttonPurple }}>
+            <button
+              type="button"
+              onClick={() => backupImportRef.current?.click()}
+              style={{ ...buttonStyle, background: buttonPurple }}
+              disabled={isLoading}
+            >
               Restore JSON
             </button>
           </div>
@@ -1555,9 +1717,9 @@ export default function App() {
                   setAdminHighlightProjectId("unassigned");
                 }}
                 onDragLeave={() => setAdminHighlightProjectId(null)}
-                onDrop={(e) => {
+                onDrop={async (e) => {
                   e.preventDefault();
-                  onDropToUnassigned();
+                  await onDropToUnassigned();
                 }}
               >
                 <div style={adminColumnHeader}>Unassigned Pool ({adminUnassignedEmployees.length})</div>
@@ -1596,9 +1758,9 @@ export default function App() {
                       setAdminHighlightProjectId(project.id);
                     }}
                     onDragLeave={() => setAdminHighlightProjectId(null)}
-                    onDrop={(e) => {
+                    onDrop={async (e) => {
                       e.preventDefault();
-                      onDropToProject(project.id);
+                      await onDropToProject(project.id);
                     }}
                   >
                     <div style={adminColumnHeader}>
