@@ -3246,7 +3246,7 @@ const adminColumnHeader = {
   marginBottom: 14,
   background: "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(14,165,233,0.14))",
   border: "1px solid rgba(96,165,250,0.18)",
-  color: "#ffffff",
+  color: "#1d1d1e",
   fontWeight: 800,
   fontSize: 16
 };
