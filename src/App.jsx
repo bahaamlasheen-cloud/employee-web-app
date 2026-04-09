@@ -1135,7 +1135,7 @@ export default function App() {
         <div className="no-print" style={heroCard}>
           <div style={heroBadge}>Web App Version</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
-            <img src={`${import.meta.env.BASE_URL}logo.png`} alt="logo" style={{ height: 40 }} />
+            <img src="/employee-web-app/logo.png" alt="logo" style={{ height: 40 }} />
             <h1 style={heroTitle}>Employee Management & Allocation System</h1>
           </div>
           <p style={heroSubtitle}>
