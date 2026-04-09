@@ -827,29 +827,49 @@ export default function App() {
   };
 
   const handleImportEmployees = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[firstSheetName];
-      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  try {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const firstSheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[firstSheetName];
+    const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-      const existing = await fetchRows(TABLES.employees);
-      let added = 0;
-      let updated = 0;
+    if (!json.length) {
+      alert("The Excel file is empty.");
+      e.target.value = "";
+      return;
+    }
 
-      for (const row of json) {
+    const existing = await fetchRows(TABLES.employees);
+    const existingMap = new Map(
+      existing.map((item) => [String(item.emp_no || "").trim(), item])
+    );
+
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+    let failed = 0;
+    const failedRows = [];
+
+    for (let i = 0; i < json.length; i++) {
+      const row = json[i];
+
+      try {
         const empNo = cleanExcelNumber(
           row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || ""
         );
 
-        if (!empNo) continue;
+        if (!empNo) {
+          skipped += 1;
+          failedRows.push(`Row ${i + 2}: Missing emp_no`);
+          continue;
+        }
 
         const payload = {
-          emp_no: empNo,
+          emp_no: String(empNo).trim(),
           name_en: String(row.name_en || row["Name EN"] || row["Employee Name EN"] || "").trim(),
           name_ar: String(row.name_ar || row["Name AR"] || row["Employee Name AR"] || "").trim(),
           designation: String(row.designation || row["Designation"] || "").trim(),
@@ -862,7 +882,13 @@ export default function App() {
           notes: String(row.notes || row["Notes"] || "").trim()
         };
 
-        const found = existing.find((item) => String(item.emp_no).trim() === empNo);
+        if (!payload.name_en) {
+          skipped += 1;
+          failedRows.push(`Row ${i + 2}: Missing name_en for Emp No ${payload.emp_no}`);
+          continue;
+        }
+
+        const found = existingMap.get(payload.emp_no);
 
         if (found) {
           const { error } = await supabase
@@ -873,50 +899,70 @@ export default function App() {
             })
             .eq("id", found.id);
 
-          if (error) throw error;
+          if (error) {
+            failed += 1;
+            failedRows.push(`Row ${i + 2}: ${payload.emp_no} - ${error.message}`);
+            continue;
+          }
+
           updated += 1;
         } else {
-          const { error } = await supabase.from(TABLES.employees).insert([
-            {
-              ...payload,
-              created_at: nowStamp(),
-              updated_at: nowStamp()
-            }
-          ]);
+          const { data, error } = await supabase
+            .from(TABLES.employees)
+            .insert([
+              {
+                ...payload,
+                created_at: nowStamp(),
+                updated_at: nowStamp()
+              }
+            ])
+            .select();
 
-          if (error) throw error;
+          if (error) {
+            failed += 1;
+            failedRows.push(`Row ${i + 2}: ${payload.emp_no} - ${error.message}`);
+            continue;
+          }
+
           added += 1;
+
+          if (data?.[0]) {
+            existingMap.set(payload.emp_no, data[0]);
+          } else {
+            existingMap.set(payload.emp_no, { emp_no: payload.emp_no });
+          }
         }
+      } catch (rowError) {
+        failed += 1;
+        failedRows.push(`Row ${i + 2}: ${rowError.message}`);
+        continue;
       }
-
-      await logChange("employee", "bulk", "IMPORT", `Imported employees from Excel. Added: ${added}, Updated: ${updated}`);
-      await refreshAll();
-      alert(`Import completed. Added: ${added}, Updated: ${updated}`);
-    } catch (error) {
-      console.error(error);
-      alert(`Import failed: ${error.message}`);
     }
 
-    e.target.value = "";
-  };
+    await logChange(
+      "employee",
+      "bulk",
+      "IMPORT",
+      `Imported employees from Excel. Added: ${added}, Updated: ${updated}, Skipped: ${skipped}, Failed: ${failed}`
+    );
 
-  const handleImportBackup = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    await refreshAll();
 
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      await replaceAllData(data);
-      await refreshAll();
-      alert("Backup restored successfully.");
-    } catch (error) {
-      console.error(error);
-      alert(`Restore failed: ${error.message}`);
-    }
+    const previewErrors =
+      failedRows.length > 0
+        ? `\n\nFirst errors:\n${failedRows.slice(0, 10).join("\n")}`
+        : "";
 
-    e.target.value = "";
-  };
+    alert(
+      `Import completed.\nAdded: ${added}\nUpdated: ${updated}\nSkipped: ${skipped}\nFailed: ${failed}${previewErrors}`
+    );
+  } catch (error) {
+    console.error(error);
+    alert(`Import failed: ${error.message}`);
+  }
+
+  e.target.value = "";
+};
 
   const printCurrentPage = () => {
     if (activeTab === "project_view" && !selectedProjectId) {
