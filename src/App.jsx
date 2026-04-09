@@ -797,17 +797,19 @@ export default function App() {
     }
   };
 
-  const unassignEmployee = async (employeeId) => {
+  const unassignEmployee = async (employeeId, showConfirm = true) => {
     try {
-      const ok = window.confirm("Remove this employee from the current project?");
-      if (!ok) return;
+      if (showConfirm) {
+        const ok = window.confirm("Remove this employee from the current project?");
+        if (!ok) return;
+      }
 
       const { error } = await supabase.from(TABLES.assignments).delete().eq("employee_id", Number(employeeId));
       if (error) throw error;
 
       await logChange("assignment", employeeId, "UNASSIGN", `Unassigned employee ID ${employeeId}`);
       await refreshAll();
-      alert("Employee unassigned successfully.");
+      if (showConfirm) alert("Employee unassigned successfully.");
     } catch (error) {
       console.error(error);
       alert(`Failed to unassign employee: ${error.message}`);
@@ -1283,7 +1285,7 @@ export default function App() {
   const onDropToUnassigned = async () => {
     if (!draggingEmployeeId) return;
     try {
-      await unassignEmployee(draggingEmployeeId);
+      await unassignEmployee(draggingEmployeeId, false);
       setDraggingEmployeeId(null);
       setAdminHighlightProjectId(null);
     } catch (error) {
@@ -1314,28 +1316,19 @@ export default function App() {
       <div style={containerStyle}>
         <div className="no-print" style={heroCard}>
           <div style={heroBadge}>Web App Version</div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              position: "relative"
-            }}
-          >
+
+          <div className="hero-head">
             <img
               src="/employee-web-app/logo.png"
               alt="logo"
-              style={{
-                height: 50,
-                position: "absolute",
-                left: 20
-              }}
+              className="hero-logo"
             />
 
-            <h1 style={heroTitle}>
+            <h1 style={heroTitle} className="hero-title">
               Employee Management & Allocation System
             </h1>
           </div>
+
           <p style={heroSubtitle}>
             Browser-based app with Supabase, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
           </p>
@@ -2057,7 +2050,7 @@ export default function App() {
                   autoComplete="off"
                   value={searchAdminEmployees}
                   onChange={(e) => setSearchAdminEmployees(e.target.value)}
-                  placeholder="Filter employees in admin page..."
+                  placeholder="Search employees in admin page..."
                   style={inputStyle}
                 />
                 <input
@@ -2065,7 +2058,7 @@ export default function App() {
                   autoComplete="off"
                   value={searchAdminProjects}
                   onChange={(e) => setSearchAdminProjects(e.target.value)}
-                  placeholder="Filter projects in admin page..."
+                  placeholder="Search projects in admin page..."
                   style={inputStyle}
                 />
               </div>
@@ -2074,7 +2067,7 @@ export default function App() {
               </div>
             </div>
 
-            <div style={adminLayout} className="responsive-grid-2">
+            <div style={adminLayout} className="admin-layout-responsive">
               <div
                 style={{
                   ...cardStyle,
@@ -2096,42 +2089,37 @@ export default function App() {
                 </div>
 
                 <div style={adminCardsWrap}>
-                  {adminUnassignedGrouped.some((group) => group.count > 0) ? (
-                    adminUnassignedGrouped.map((group) => (
-                      <div key={group.section} style={adminSectionGroupCard}>
-                        <button
-                          type="button"
-                          onClick={() => toggleAdminSection(group.section)}
-                          style={adminSectionHeaderButton}
-                        >
-                          <span>
-                            {collapsedAdminSections[group.section] ? "▶" : "▼"} {group.section} ({group.count})
-                          </span>
-                        </button>
+                  {adminUnassignedGrouped.map((group) => (
+                    <div key={group.section} style={adminSectionGroupCard}>
+                      <button
+                        type="button"
+                        onClick={() => toggleAdminSection(group.section)}
+                        style={adminSectionHeaderButton}
+                      >
+                        <span>
+                          {collapsedAdminSections[group.section] ? "▶" : "▼"} {group.section} ({group.count})
+                        </span>
+                      </button>
 
-                        {!collapsedAdminSections[group.section] && (
-                          <div style={{ ...adminCardsWrap, marginTop: 10 }}>
-                            {group.count > 0 ? (
-                              group.items.map((emp) => (
-                                <EmployeeDragCard
-                                  key={emp.id}
-                                  employee={emp}
-                                  isDragging={Number(draggingEmployeeId) === Number(emp.id)}
-                                  onDragStart={onDragStartEmployee}
-                                  onDragEnd={onDragEndEmployee}
-                                  onEdit={() => startEditEmployee(emp)}
-                                />
-                              ))
-                            ) : (
-                              <div style={adminEmptyMiniBox}>No employees in this section</div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  ) : (
-                    <div style={emptyGroupBox}>No unassigned employees</div>
-                  )}
+                      {!collapsedAdminSections[group.section] && (
+                        <div style={{ ...adminCardsWrap, marginTop: 10 }}>
+                          {group.count > 0 ? (
+                            group.items.map((emp) => (
+                              <EmployeeDragCard
+                                key={emp.id}
+                                employee={emp}
+                                isDragging={Number(draggingEmployeeId) === Number(emp.id)}
+                                onDragStart={onDragStartEmployee}
+                                onDragEnd={onDragEndEmployee}
+                              />
+                            ))
+                          ) : (
+                            <div style={adminEmptyMiniBox}>No employees in this section</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -2173,7 +2161,6 @@ export default function App() {
                             isDragging={Number(draggingEmployeeId) === Number(emp.id)}
                             onDragStart={onDragStartEmployee}
                             onDragEnd={onDragEndEmployee}
-                            onEdit={() => startEditEmployee(emp)}
                           />
                         ))
                       ) : (
@@ -2269,54 +2256,53 @@ function LoginPage() {
   };
 
   return (
-    <div style={{ textAlign: "center", marginTop: 100 }}>
+    <div style={{ textAlign: "center", marginTop: 100, color: "#fff" }}>
       <h2>Login</h2>
 
       <input
         placeholder="Email"
         onChange={(e) => setEmail(e.target.value)}
-      /><br /><br />
+        style={{ padding: 12, borderRadius: 10, border: "1px solid #ccc", width: 280, maxWidth: "90%" }}
+      />
+      <br />
+      <br />
 
       <input
         type="password"
         placeholder="Password"
         onChange={(e) => setPassword(e.target.value)}
-      /><br /><br />
+        style={{ padding: 12, borderRadius: 10, border: "1px solid #ccc", width: 280, maxWidth: "90%" }}
+      />
+      <br />
+      <br />
 
-      <button onClick={handleLogin}>Login</button>
+      <button onClick={handleLogin} style={{ ...buttonStyle, background: buttonPrimary }}>
+        Login
+      </button>
     </div>
   );
 }
 
-function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd, onEdit }) {
+function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd }) {
   return (
     <div
       draggable
       onDragStart={() => onDragStart(employee.id)}
       onDragEnd={onDragEnd}
+      title={`${employee.name_en || ""} | ${employee.designation || ""} | ${employee.section || ""}`}
       style={{
         ...employeeDragCard,
         opacity: isDragging ? 0.45 : 1,
         cursor: "grab"
       }}
     >
-      <div style={employeeCardTopRow}>
-        <div>
-          <div style={employeeCardName}>{employee.name_en || "No Name"}</div>
-          <div style={employeeCardMeta}>{employee.emp_no || "No Emp No"}</div>
-        </div>
-        <button type="button" onClick={onEdit} style={{ ...miniButton, background: buttonWarning }}>
-          Edit
-        </button>
+      <div style={compactEmployeeName} className="truncate-1">
+        {employee.name_en || "No Name"}
       </div>
-      <div style={employeeCardBadgeRow}>
-        <span style={employeeBadge}>{employee.designation || "No Designation"}</span>
-        <span style={employeeBadge}>{employee.section || "Others"}</span>
-        <span style={employeeBadgeMuted}>{employee.shift || "No Shift"}</span>
+
+      <div style={compactEmployeeMeta} className="truncate-1">
+        {(employee.designation || "No Designation") + " • " + (employee.section || "Others")}
       </div>
-      <div style={employeeCardInfo}>Rig: {employee.rig_no || "-"}</div>
-      <div style={employeeCardInfo}>Status: {employee.status || "-"}</div>
-      <div style={employeeCardInfo}>Current Project: {employee.current_project || "Unassigned"}</div>
     </div>
   );
 }
@@ -2385,9 +2371,78 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #2dd4bf, #2563eb); border-radius: 999px; }
 ::selection { background: rgba(45, 212, 191, 0.35); }
 
+.truncate-1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.hero-logo {
+  height: 50px;
+  position: absolute;
+  left: 20px;
+}
+
 @page {
   size: A4 portrait;
   margin: 5mm;
+}
+
+@media (max-width: 1200px) {
+  .responsive-grid-6 {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+@media (max-width: 992px) {
+  .responsive-grid-4,
+  .responsive-grid-3,
+  .responsive-grid-2,
+  .responsive-grid-6 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .admin-layout-responsive {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hero-logo {
+    position: static !important;
+    margin-bottom: 12px;
+  }
+
+  .hero-head {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .responsive-grid-4,
+  .responsive-grid-3,
+  .responsive-grid-2,
+  .responsive-grid-6 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .hero-title {
+    font-size: 26px !important;
+    line-height: 1.25 !important;
+  }
+
+  .hero-logo {
+    height: 42px !important;
+  }
+
+  .print-table-wrap {
+    overflow-x: auto !important;
+  }
 }
 
 @media print {
@@ -2746,66 +2801,29 @@ const adminEmptyMiniBox = {
 };
 
 const employeeDragCard = {
-  background: "linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.92))",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.94))",
   border: "1px solid rgba(203,213,225,0.85)",
-  borderRadius: 18,
-  padding: 14,
+  borderRadius: 14,
+  padding: "10px 12px",
   color: "#0f172a",
-  boxShadow: "0 10px 24px rgba(15,23,42,0.14)"
-};
-
-const employeeCardTopRow = {
+  boxShadow: "0 8px 18px rgba(15,23,42,0.12)",
+  minHeight: 58,
   display: "flex",
-  justifyContent: "space-between",
-  gap: 8,
-  alignItems: "flex-start",
-  marginBottom: 10
+  flexDirection: "column",
+  justifyContent: "center",
+  gap: 4
 };
 
-const employeeCardName = {
+const compactEmployeeName = {
   fontWeight: 800,
-  fontSize: 15,
-  color: "#0f172a"
+  fontSize: 14,
+  color: "#0f172a",
+  lineHeight: 1.25
 };
 
-const employeeCardMeta = {
-  marginTop: 4,
+const compactEmployeeMeta = {
   fontSize: 12,
   color: "#475569",
-  fontWeight: 700
-};
-
-const employeeCardBadgeRow = {
-  display: "flex",
-  gap: 8,
-  flexWrap: "wrap",
-  marginBottom: 10
-};
-
-const employeeBadge = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "6px 10px",
-  borderRadius: 999,
-  background: "rgba(37,99,235,0.12)",
-  color: "#1d4ed8",
-  fontSize: 12,
-  fontWeight: 800
-};
-
-const employeeBadgeMuted = {
-  display: "inline-flex",
-  alignItems: "center",
-  padding: "6px 10px",
-  borderRadius: 999,
-  background: "rgba(15,23,42,0.07)",
-  color: "#334155",
-  fontSize: 12,
-  fontWeight: 700
-};
-
-const employeeCardInfo = {
-  fontSize: 13,
-  color: "#334155",
-  lineHeight: 1.6
+  fontWeight: 700,
+  lineHeight: 1.25
 };
