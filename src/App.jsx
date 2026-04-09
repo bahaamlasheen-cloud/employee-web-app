@@ -1886,7 +1886,7 @@ export default function App() {
                     <ProjectSectionBreakdown rows={dashboardSectionRows} />
                   ) : (
                     <div style={dashboardEmptyState}>
-                      اختار مشروع من الشارت علشان يظهر توزيع العمالة حسب السكاشن.
+                      Select a project from the chart to view the workforce breakdown by section.
                     </div>
                   )}
                 </div>
@@ -1920,8 +1920,10 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  <div className="print-report-title">Employee Hours Summary</div>
-                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <PrintHeader
+                    title="Employee Hours Summary"
+                    subtitle="Generated from Employee Management & Allocation System"
+                  />
                   <div className="print-table-wrap" style={tableWrap}>
                     <table style={tableStyle}>
                       <thead>
@@ -2098,8 +2100,10 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  <div className="print-report-title">Employees List</div>
-                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <PrintHeader
+                    title="Employees List"
+                    subtitle="Generated from Employee Management & Allocation System"
+                  />
                   <div style={subInfoText} className="no-print">
                     Showing <strong style={{ color: "#ffffff" }}>{filteredEmployees.length}</strong> record(s)
                   </div>
@@ -2217,8 +2221,10 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  <div className="print-report-title">Projects List</div>
-                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <PrintHeader
+                    title="Projects List"
+                    subtitle="Generated from Employee Management & Allocation System"
+                  />
                   <div className="print-table-wrap" style={tableWrap}>
                     <table style={tableStyle}>
                       <thead>
@@ -2323,8 +2329,10 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  <div className="print-report-title">Current Assignments</div>
-                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <PrintHeader
+                    title="Current Assignments"
+                    subtitle="Generated from Employee Management & Allocation System"
+                  />
                   <div className="print-table-wrap" style={tableWrap}>
                     <table style={tableStyle}>
                       <thead>
@@ -2420,8 +2428,10 @@ export default function App() {
 
               <div className="print-page-shell">
                 <div className="print-area">
-                  <div className="print-report-title">Work Entries</div>
-                  <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                  <PrintHeader
+                    title="Work Entries"
+                    subtitle="Generated from Employee Management & Allocation System"
+                  />
                   <div className="print-table-wrap" style={tableWrap}>
                     <table style={tableStyle}>
                       <thead>
@@ -2533,11 +2543,10 @@ export default function App() {
                 <div className="print-area">
                   {selectedProjectId ? (
                     <>
-                      <div className="print-report-title">Employee Allocation Report</div>
-                      <div className="print-report-subtitle">
-                        Project: {selectedProject?.project_name || "-"}
-                        {selectedProject?.project_code ? ` | Code: ${selectedProject.project_code}` : ""}
-                      </div>
+                      <PrintHeader
+                        title="Employee Allocation Report"
+                        subtitle={`Project: ${selectedProject?.project_name || "-"}${selectedProject?.project_code ? ` | Code: ${selectedProject.project_code}` : ""}`}
+                      />
 
                       <div style={designationGroupsWrap}>
                         {groupedProjectEmployees.map((group) => (
@@ -2775,8 +2784,10 @@ export default function App() {
 
             <div className="print-page-shell">
               <div className="print-area">
-                <div className="print-report-title">System Change Logs</div>
-                <div className="print-report-subtitle">Generated from Employee Management & Allocation System</div>
+                <PrintHeader
+                  title="System Change Logs"
+                  subtitle="Generated from Employee Management & Allocation System"
+                />
                 <div className="print-table-wrap" style={tableWrap}>
                   <table style={tableStyle}>
                     <thead>
@@ -2811,6 +2822,39 @@ export default function App() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+function PrintHeader({ title, subtitle }) {
+  return (
+    <div className="print-only print-header">
+      <div className="print-header-top">
+        <div className="print-header-brand">
+          <img
+            src="/employee-web-app/logo.png"
+            alt="Company Logo"
+            className="print-header-logo"
+          />
+          <div className="print-header-brand-text">
+            <div className="print-company-name">Employee Management & Allocation System</div>
+            <div className="print-company-sub">Professional Workforce Report</div>
+          </div>
+        </div>
+
+        <div className="print-header-meta">
+          <div className="print-generated-label">Generated Report</div>
+          <div className="print-generated-date">{new Date().toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div className="print-header-divider" />
+
+      <div className="print-header-titles">
+        <div className="print-report-title">{title}</div>
+        {subtitle ? <div className="print-report-subtitle">{subtitle}</div> : null}
       </div>
     </div>
   );
@@ -3287,6 +3331,200 @@ button, input, select, textarea {
     text-decoration: underline !important;
     margin: 5px 0 4px 0 !important;
     color: #000 !important;
+  }
+}
+
+
+.print-only {
+  display: none;
+}
+
+.print-header {
+  margin: 0 0 18px;
+  padding: 0 0 14px;
+}
+
+.print-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.print-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.print-header-logo {
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.print-header-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.print-company-name {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.print-company-sub {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.print-header-meta {
+  text-align: right;
+}
+
+.print-generated-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.print-generated-date {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.print-header-divider {
+  height: 2px;
+  margin: 14px 0 12px;
+  background: linear-gradient(90deg, #0f172a 0%, #475569 35%, #cbd5e1 100%);
+  border-radius: 999px;
+}
+
+.print-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.print-report-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #0f172a;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.print-report-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.print-area {
+  background: #ffffff;
+  border-radius: 18px;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.print-table-wrap {
+  overflow-x: auto;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .print-page-shell,
+  .print-page-shell *,
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-page-shell {
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-area {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr, img, .designation-group {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  th, td {
+    color: #111827 !important;
+    border-color: #cbd5e1 !important;
+    font-size: 10.5px !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    vertical-align: middle !important;
+  }
+
+  .print-report-title {
+    font-size: 18px !important;
+  }
+
+  .print-report-subtitle,
+  .print-generated-date,
+  .print-company-sub {
+    font-size: 10.5px !important;
   }
 }
 `;
