@@ -935,7 +935,6 @@ export default function App() {
       } catch (rowError) {
         failed += 1;
         failedRows.push(`Row ${i + 2}: ${rowError.message}`);
-        continue;
       }
     }
 
@@ -964,13 +963,31 @@ export default function App() {
   e.target.value = "";
 };
 
-  const printCurrentPage = () => {
-    if (activeTab === "project_view" && !selectedProjectId) {
-      alert("Please select a project first.");
-      return;
-    }
-    window.print();
-  };
+const handleImportBackup = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    await replaceAllData(data);
+    await refreshAll();
+    alert("Backup restored successfully.");
+  } catch (error) {
+    console.error(error);
+    alert(`Restore failed: ${error.message}`);
+  }
+
+  e.target.value = "";
+};
+
+const printCurrentPage = () => {
+  if (activeTab === "project_view" && !selectedProjectId) {
+    return;
+  }
+
+  window.print();
+};
 
   const filteredDashboardRows = useMemo(() => {
     const q = normalizeText(searchDashboard);
