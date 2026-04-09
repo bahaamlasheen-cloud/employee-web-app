@@ -3510,11 +3510,26 @@ button, input, select, textarea {
 
   th, td {
     color: #111827 !important;
-    border-color: #cbd5e1 !important;
+    border: 1px solid #cbd5e1 !important;
     font-size: 10.5px !important;
     padding-top: 8px !important;
     padding-bottom: 8px !important;
     vertical-align: middle !important;
+  }
+
+  thead th,
+  th {
+    background: #e2e8f0 !important;
+    color: #0f172a !important;
+    border: 1px solid #94a3b8 !important;
+    font-weight: 800 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  td {
+    background: #ffffff !important;
+    color: #111827 !important;
   }
 
   .print-report-title {
