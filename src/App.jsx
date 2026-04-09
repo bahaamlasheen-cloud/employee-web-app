@@ -3276,7 +3276,7 @@ const adminSectionHeaderButton = {
   borderRadius: 12,
   padding: "12px 14px",
   background: "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(14,165,233,0.10))",
-  color: "#374151",,
+  color: "#374151",
   fontWeight: 800,
   fontSize: 14,
   textAlign: "left",
