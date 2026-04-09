@@ -2549,7 +2549,12 @@ export default function App() {
                 }}
               >
                 <div style={adminColumnHeader}>
-                  Unassigned Pool ({adminUnassignedGrouped.reduce((sum, group) => sum + group.count, 0)})
+                  <div
+                    className="admin-pool-title"
+                    style={{ color: "#0f172a", fontWeight: 800, fontSize: 16, letterSpacing: "-0.01em", lineHeight: 1.3 }}
+                  >
+                    Unassigned Pool ({adminUnassignedGrouped.reduce((sum, group) => sum + group.count, 0)})
+                  </div>
                 </div>
 
                 <div style={adminCardsWrap}>
@@ -2610,10 +2615,19 @@ export default function App() {
                     }}
                   >
                     <div style={adminColumnHeader}>
-                      <div style={{ color: "#1f2937", fontWeight: 800 }}>
-                      <div>{project.project_name}</div>
-                      <div style={adminColumnMeta}>
-                        {project.project_code || "No Code"} | {project.employees.length} Staff
+                      <div style={{ width: "100%" }}>
+                        <div
+                          className="admin-project-name"
+                          style={{ color: "#0f172a", fontWeight: 800, fontSize: 17, letterSpacing: "-0.02em", lineHeight: 1.3 }}
+                        >
+                          {project.project_name}
+                        </div>
+                        <div
+                          className="admin-project-meta-text"
+                          style={adminColumnMeta}
+                        >
+                          {project.project_code || "No Code"} | {project.employees.length} Staff
+                        </div>
                       </div>
                     </div>
 
@@ -2722,12 +2736,12 @@ function LoginPage() {
 
   return (
     <div style={{ textAlign: "center", marginTop: 100, color: "#0f172a" }}>
-      <h2>Login</h2>
+      <h2 style={{ fontSize: 28, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 18 }}>Login</h2>
 
       <input
         placeholder="Email"
         onChange={(e) => setEmail(e.target.value)}
-        style={{ padding: 12, borderRadius: 10, border: "1px solid #ccc", width: 280, maxWidth: "90%" }}
+        style={{ padding: 12, borderRadius: 12, border: "1px solid #cbd5e1", width: 280, maxWidth: "90%", fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em" }}
       />
       <br />
       <br />
@@ -2736,7 +2750,7 @@ function LoginPage() {
         type="password"
         placeholder="Password"
         onChange={(e) => setPassword(e.target.value)}
-        style={{ padding: 12, borderRadius: 10, border: "1px solid #ccc", width: 280, maxWidth: "90%" }}
+        style={{ padding: 12, borderRadius: 12, border: "1px solid #cbd5e1", width: 280, maxWidth: "90%", fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em" }}
       />
       <br />
       <br />
@@ -2829,8 +2843,30 @@ const buttonOrange = "linear-gradient(135deg, #f97316, #ea580c)";
 const buttonMuted = "linear-gradient(135deg, #64748b, #475569)";
 
 const globalStyles = `
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+:root {
+  --app-font: "Inter", "Poppins", "Segoe UI", Tahoma, Arial, sans-serif;
+  --text-strong: #0f172a;
+  --text-body: #334155;
+  --text-muted: #64748b;
+}
+
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; min-height: 100%; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--app-font);
+  color: var(--text-strong);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+button, input, select, textarea {
+  font: inherit;
+  letter-spacing: inherit;
+}
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 999px; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #93c5fd, #2563eb); border-radius: 999px; }
@@ -2848,6 +2884,30 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   object-fit: contain;
   display: block;
 }
+
+
+.admin-project-name {
+  color: #0f172a !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.3 !important;
+}
+
+.admin-project-meta-text {
+  color: #475569 !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+}
+
+.admin-pool-title {
+  color: #0f172a !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+}
+
 
 @page {
   size: A4 portrait;
@@ -3057,7 +3117,7 @@ const pageStyle = {
     "radial-gradient(circle at top left, rgba(96,165,250,0.16), transparent 28%), radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 24%), linear-gradient(180deg, #f8fbff 0%, #eef4ff 45%, #e6eefc 100%)",
   color: "#0f172a",
   padding: 28,
-  fontFamily: "Segoe UI, Tahoma, Arial, sans-serif",
+  fontFamily: "Inter, Poppins, Segoe UI, Tahoma, Arial, sans-serif",
   position: "relative",
   overflow: "hidden"
 };
@@ -3111,15 +3171,18 @@ const heroBadge = {
   color: "#1d4ed8",
   fontSize: 13,
   fontWeight: 700,
+  letterSpacing: "0.01em",
+  lineHeight: 1.4,
   border: "1px solid rgba(37,99,235,0.18)",
   marginBottom: 8
 };
 
 const heroTitle = {
   margin: 0,
-  fontSize: 32,
+  fontSize: 34,
   fontWeight: 800,
-  letterSpacing: "-0.02em",
+  letterSpacing: "-0.03em",
+  lineHeight: 1.15,
   textAlign: "right",
   color: "#0f172a"
 };
@@ -3127,10 +3190,12 @@ const heroTitle = {
 const heroSubtitle = {
   textAlign: "right",
   color: "#475569",
-  marginTop: 8,
+  marginTop: 10,
   marginBottom: 0,
   fontSize: 15,
-  lineHeight: 1.6,
+  fontWeight: 500,
+  letterSpacing: "-0.01em",
+  lineHeight: 1.7,
   maxWidth: 900
 };
 
@@ -3191,32 +3256,32 @@ const statCard = {
 };
 
 const statIcon = { fontSize: 24, marginBottom: 10 };
-const statTitle = { color: "#64748b", marginBottom: 10, fontSize: 15, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4 };
-const statValue = { fontSize: 34, fontWeight: 800, color: "#0f172a" };
+const statTitle = { color: "#64748b", marginBottom: 10, fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em", minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.45 };
+const statValue = { fontSize: 34, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.03em", lineHeight: 1.1 };
 
 const tabsWrap = { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 };
-const tabButton = { padding: "12px 18px", borderRadius: 14, border: "1px solid rgba(148,163,184,0.18)", color: "#334155", cursor: "pointer", fontWeight: 700, fontSize: 14, background: "rgba(255,255,255,0.94)", transition: "all 0.2s ease", boxShadow: "0 8px 18px rgba(15,23,42,0.06)" };
+const tabButton = { padding: "12px 18px", borderRadius: 14, border: "1px solid rgba(148,163,184,0.18)", color: "#334155", cursor: "pointer", fontWeight: 700, fontSize: 14, letterSpacing: "-0.01em", lineHeight: 1.2, background: "rgba(255,255,255,0.94)", transition: "all 0.2s ease", boxShadow: "0 8px 18px rgba(15,23,42,0.06)" };
 const activeTabButton = { background: "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(59,130,246,0.88))", color: "#ffffff", border: "1px solid rgba(59,130,246,0.38)", transform: "translateY(-1px)" };
 
 const formGrid4 = { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 };
 const formGrid3 = { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 };
 const formGrid2 = { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 };
 
-const inputStyle = { padding: "13px 15px", borderRadius: 14, border: "1px solid rgba(203,213,225,0.18)", background: "rgba(248,250,252,0.95)", color: "#0f172a", fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)" };
+const inputStyle = { padding: "13px 15px", borderRadius: 14, border: "1px solid rgba(203,213,225,0.42)", background: "rgba(248,250,252,0.95)", color: "#0f172a", fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.4, width: "100%", boxSizing: "border-box", outline: "none", boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)" };
 
 const actionRow = { display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" };
-const buttonStyle = { padding: "11px 18px", borderRadius: 14, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 14, boxShadow: "0 10px 24px rgba(0,0,0,0.22)" };
-const miniButton = { padding: "8px 12px", borderRadius: 10, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 13, boxShadow: "0 8px 18px rgba(0,0,0,0.18)" };
+const buttonStyle = { padding: "11px 18px", borderRadius: 14, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 14, letterSpacing: "-0.01em", lineHeight: 1.2, boxShadow: "0 10px 24px rgba(0,0,0,0.22)" };
+const miniButton = { padding: "8px 12px", borderRadius: 10, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 13, letterSpacing: "-0.01em", lineHeight: 1.2, boxShadow: "0 8px 18px rgba(0,0,0,0.18)" };
 const smallActionWrap = { display: "flex", gap: 6, flexWrap: "wrap" };
 const sectionHeaderWrap = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 };
-const sectionTitle = { margin: 0, fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.01em" };
-const subInfoText = { marginTop: 12, color: "#64748b", fontSize: 14 };
+const sectionTitle = { margin: 0, fontSize: 24, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.02em", lineHeight: 1.2 };
+const subInfoText = { marginTop: 12, color: "#64748b", fontSize: 14, fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.6 };
 const tableWrap = { overflowX: "auto", borderRadius: 12, background: "#ffffff", border: "1px solid rgba(226,232,240,0.75)", boxShadow: "0 12px 26px rgba(0,0,0,0.16)" };
 const tableStyle = { width: "100%", minWidth: 1100, borderCollapse: "collapse", background: "rgba(255,255,255,0.97)", color: "#0f172a" };
 const groupTableStyle = { width: "100%", minWidth: 1000, borderCollapse: "collapse", background: "#ffffff", color: "#0f172a" };
-const thStyle = { padding: 14, textAlign: "left", background: "linear-gradient(180deg, #0b0b0b 0%, #111827 100%)", borderBottom: "1px solid #1f2937", whiteSpace: "nowrap", fontSize: 14, color: "#ffffff", fontWeight: 800 };
+const thStyle = { padding: 14, textAlign: "left", background: "linear-gradient(180deg, #0b0b0b 0%, #111827 100%)", borderBottom: "1px solid #1f2937", whiteSpace: "nowrap", fontSize: 13, color: "#ffffff", fontWeight: 800, letterSpacing: "0.02em", lineHeight: 1.25 };
 const thStyleCenter = { ...thStyle, textAlign: "center" };
-const tdStyle = { padding: 14, borderBottom: "1px solid #e5e7eb", verticalAlign: "top", fontSize: 14, color: "#111827", lineHeight: 1.5 };
+const tdStyle = { padding: 14, borderBottom: "1px solid #e5e7eb", verticalAlign: "top", fontSize: 14, color: "#111827", fontWeight: 500, letterSpacing: "-0.01em", lineHeight: 1.55 };
 const tdStyleCenter = { ...tdStyle, textAlign: "center" };
 const emptyTd = { padding: 28, textAlign: "center", color: "#64748b", fontWeight: "700", fontSize: 15 };
 const projectInfoBox = { background: "linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.92))", border: "1px solid rgba(59,130,246,0.22)", borderRadius: 14, padding: 14, display: "flex", alignItems: "center", color: "#cbd5e1", fontWeight: "700", minHeight: 48 };
@@ -3246,16 +3311,20 @@ const adminColumnHeader = {
   marginBottom: 14,
   background: "linear-gradient(135deg, rgba(37,99,235,0.18), rgba(14,165,233,0.14))",
   border: "1px solid rgba(96,165,250,0.18)",
-  color: "#09090a",
+  color: "#0f172a",
   fontWeight: 800,
-  fontSize: 16
+  fontSize: 16,
+  letterSpacing: "-0.01em",
+  lineHeight: 1.35
 };
 
 const adminColumnMeta = {
   marginTop: 6,
   fontSize: 12,
-  color: "#cbd5e1",
-  fontWeight: 600
+  color: "#475569",
+  fontWeight: 700,
+  letterSpacing: "0.01em",
+  lineHeight: 1.4
 };
 
 const adminCardsWrap = {
@@ -3277,9 +3346,11 @@ const adminSectionHeaderButton = {
   borderRadius: 12,
   padding: "12px 14px",
   background: "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(14,165,233,0.10))",
-  color: "#464647",
+  color: "#1f2937",
   fontWeight: 800,
   fontSize: 14,
+  letterSpacing: "-0.01em",
+  lineHeight: 1.35,
   textAlign: "left",
   cursor: "pointer",
   display: "flex",
@@ -3295,7 +3366,9 @@ const adminEmptyMiniBox = {
   background: "rgba(255,255,255,0.03)",
   border: "1px dashed rgba(255,255,255,0.12)",
   fontWeight: 600,
-  fontSize: 13
+  fontSize: 13,
+  letterSpacing: "-0.01em",
+  lineHeight: 1.45
 };
 
 const employeeDragCard = {
@@ -3305,7 +3378,7 @@ const employeeDragCard = {
   padding: "10px 12px",
   color: "#0f172a",
   boxShadow: "0 8px 18px rgba(15,23,42,0.12)",
-  minHeight: 58,
+  minHeight: 60,
   display: "flex",
   flexDirection: "column",
   justifyContent: "center",
@@ -3316,7 +3389,8 @@ const compactEmployeeName = {
   fontWeight: 800,
   fontSize: 14,
   color: "#0f172a",
-  lineHeight: 1.25
+  letterSpacing: "-0.02em",
+  lineHeight: 1.3
 };
 
 const compactEmployeeMeta = {
