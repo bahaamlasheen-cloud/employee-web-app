@@ -25,6 +25,17 @@ const SECTION_OPTIONS = [
   "Others"
 ];
 
+const EMPLOYEE_STATUS_AVAILABLE = "Available";
+const EMPLOYEE_STATUS_ON_LEAVE = "On Leave";
+const EMPLOYEE_STATUS_SICK = "Sick";
+const EMPLOYEE_STATUS_LEFT_COMPANY = "Left Company";
+
+const EMPLOYEE_STATUS_OPTIONS = [
+  EMPLOYEE_STATUS_AVAILABLE,
+  EMPLOYEE_STATUS_ON_LEAVE,
+  EMPLOYEE_STATUS_SICK,
+  EMPLOYEE_STATUS_LEFT_COMPANY
+];
 
 const PROJECT_STATUS_ACTIVE = "Active";
 const PROJECT_STATUS_CLOSED = "Closed";
@@ -123,6 +134,82 @@ function normalizeSection(value) {
   return sectionMap[normalized] || "Others";
 }
 
+function normalizeEmployeeStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (["available", "active", "free", "ready"].includes(normalized)) return EMPLOYEE_STATUS_AVAILABLE;
+  if (["on leave", "leave", "vacation", "annual leave", "holiday"].includes(normalized)) return EMPLOYEE_STATUS_ON_LEAVE;
+  if (["sick", "sick leave", "medical", "medical leave"].includes(normalized)) return EMPLOYEE_STATUS_SICK;
+  if (["left company", "left", "resigned", "terminated", "inactive", "out"].includes(normalized)) {
+    return EMPLOYEE_STATUS_LEFT_COMPANY;
+  }
+
+  return EMPLOYEE_STATUS_AVAILABLE;
+}
+
+function addDaysToDate(dateString, days) {
+  if (!dateString || !days) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + Number(days));
+  return date.toISOString().split("T")[0];
+}
+
+function toPositiveIntegerOrEmpty(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return String(Math.floor(n));
+}
+
+function buildEmployeeAvailabilityFields(form) {
+  const status = normalizeEmployeeStatus(form.status);
+
+  if (status === EMPLOYEE_STATUS_AVAILABLE) {
+    return {
+      status,
+      unavailable_from: null,
+      unavailable_days: null,
+      available_again_on: null,
+      availability_note: ""
+    };
+  }
+
+  const unavailableFrom = String(form.unavailable_from || "").trim();
+  const unavailableDays = status === EMPLOYEE_STATUS_LEFT_COMPANY ? null : Number(form.unavailable_days || 0) || null;
+  const availableAgainOn =
+    status === EMPLOYEE_STATUS_LEFT_COMPANY
+      ? null
+      : unavailableFrom && unavailableDays
+        ? addDaysToDate(unavailableFrom, unavailableDays)
+        : null;
+
+  return {
+    status,
+    unavailable_from: unavailableFrom || null,
+    unavailable_days: unavailableDays,
+    available_again_on: availableAgainOn,
+    availability_note: String(form.availability_note || "").trim()
+  };
+}
+
+function isEmployeeAvailableForAssignment(employee) {
+  return normalizeEmployeeStatus(employee?.status) === EMPLOYEE_STATUS_AVAILABLE;
+}
+
+function getEmployeeAvailabilityText(employee) {
+  const status = normalizeEmployeeStatus(employee?.status);
+
+  if (status === EMPLOYEE_STATUS_AVAILABLE) {
+    return EMPLOYEE_STATUS_AVAILABLE;
+  }
+
+  const from = employee?.unavailable_from ? ` | From: ${employee.unavailable_from}` : "";
+  const days = employee?.unavailable_days ? ` | Days: ${employee.unavailable_days}` : "";
+  const back = employee?.available_again_on ? ` | Back: ${employee.available_again_on}` : "";
+
+  return `${status}${from}${days}${back}`;
+}
+
 const emptyEmployee = {
   id: null,
   emp_no: "",
@@ -134,7 +221,11 @@ const emptyEmployee = {
   shift: "",
   camp_no: "",
   room_no: "",
-  status: PROJECT_STATUS_ACTIVE,
+  status: EMPLOYEE_STATUS_AVAILABLE,
+  unavailable_from: "",
+  unavailable_days: "",
+  available_again_on: "",
+  availability_note: "",
   notes: ""
 };
 
@@ -337,9 +428,25 @@ async function enrichData() {
   const employees = employeesRaw.map((emp) => {
     const assignment = activeAssignmentByEmployeeId.get(Number(emp.id));
     const project = assignment ? projectById.get(Number(assignment.project_id)) : null;
+    const status = normalizeEmployeeStatus(emp.status);
+    const unavailableDays = emp.unavailable_days ? Number(emp.unavailable_days) : null;
+    const availableAgainOn =
+      emp.available_again_on ||
+      (status !== EMPLOYEE_STATUS_AVAILABLE &&
+      status !== EMPLOYEE_STATUS_LEFT_COMPANY &&
+      emp.unavailable_from &&
+      unavailableDays
+        ? addDaysToDate(emp.unavailable_from, unavailableDays)
+        : "");
+
     return {
       ...emp,
       section: normalizeSection(emp.section),
+      status,
+      unavailable_from: emp.unavailable_from || "",
+      unavailable_days: unavailableDays || "",
+      available_again_on: availableAgainOn || "",
+      availability_note: emp.availability_note || "",
       current_project: project?.project_name || "",
       current_project_id: project?.id || null
     };
@@ -370,7 +477,20 @@ async function enrichData() {
         rig_no: employee.rig_no,
         camp_no: employee.camp_no,
         room_no: employee.room_no,
-        status: employee.status,
+        status: normalizeEmployeeStatus(employee.status),
+        unavailable_from: employee.unavailable_from || "",
+        unavailable_days: employee.unavailable_days || "",
+        available_again_on:
+          employee.available_again_on ||
+          (
+            normalizeEmployeeStatus(employee.status) !== EMPLOYEE_STATUS_AVAILABLE &&
+            normalizeEmployeeStatus(employee.status) !== EMPLOYEE_STATUS_LEFT_COMPANY &&
+            employee.unavailable_from &&
+            employee.unavailable_days
+              ? addDaysToDate(employee.unavailable_from, employee.unavailable_days)
+              : ""
+          ),
+        availability_note: employee.availability_note || "",
         employee_notes: employee.notes,
         project_name: project.project_name,
         project_code: project.project_code,
@@ -576,7 +696,11 @@ export default function App() {
         camp_no: a.camp_no,
         room_no: a.room_no,
         rig_no: a.rig_no,
-        status: a.status,
+        status: normalizeEmployeeStatus(a.status),
+        unavailable_from: a.unavailable_from || "",
+        unavailable_days: a.unavailable_days || "",
+        available_again_on: a.available_again_on || "",
+        availability_note: a.availability_note || "",
         assigned_at: a.assigned_at,
         assignment_notes: a.notes || ""
       }));
@@ -586,7 +710,45 @@ export default function App() {
 
   const handleEmployeeChange = (e) => {
     const { name, value } = e.target;
-    setEmployeeForm((prev) => ({ ...prev, [name]: value }));
+
+    setEmployeeForm((prev) => {
+      const updated = { ...prev, [name]: value };
+
+      if (name === "status") {
+        updated.status = normalizeEmployeeStatus(value);
+
+        if (updated.status === EMPLOYEE_STATUS_AVAILABLE) {
+          updated.unavailable_from = "";
+          updated.unavailable_days = "";
+          updated.available_again_on = "";
+          updated.availability_note = "";
+        }
+
+        if (updated.status === EMPLOYEE_STATUS_LEFT_COMPANY) {
+          updated.unavailable_days = "";
+          updated.available_again_on = "";
+        }
+      }
+
+      if (name === "unavailable_days") {
+        updated.unavailable_days = value === "" ? "" : toPositiveIntegerOrEmpty(value);
+      }
+
+      if (
+        updated.status !== EMPLOYEE_STATUS_AVAILABLE &&
+        updated.status !== EMPLOYEE_STATUS_LEFT_COMPANY &&
+        updated.unavailable_from &&
+        updated.unavailable_days
+      ) {
+        updated.available_again_on = addDaysToDate(updated.unavailable_from, updated.unavailable_days);
+      } else if (updated.status === EMPLOYEE_STATUS_LEFT_COMPANY || updated.status === EMPLOYEE_STATUS_AVAILABLE) {
+        updated.available_again_on = "";
+      } else {
+        updated.available_again_on = "";
+      }
+
+      return updated;
+    });
   };
 
   const handleProjectChange = (e) => {
@@ -621,6 +783,24 @@ export default function App() {
         return;
       }
 
+      const availabilityFields = buildEmployeeAvailabilityFields(employeeForm);
+
+      if (
+        availabilityFields.status !== EMPLOYEE_STATUS_AVAILABLE &&
+        !availabilityFields.unavailable_from
+      ) {
+        alert("Please enter the unavailable start date.");
+        return;
+      }
+
+      if (
+        [EMPLOYEE_STATUS_ON_LEAVE, EMPLOYEE_STATUS_SICK].includes(availabilityFields.status) &&
+        !availabilityFields.unavailable_days
+      ) {
+        alert("Please enter unavailable days for leave or sick status.");
+        return;
+      }
+
       const rows = await fetchRows(TABLES.employees);
       const duplicate = rows.find(
         (row) =>
@@ -644,7 +824,11 @@ export default function App() {
           shift: employeeForm.shift,
           camp_no: employeeForm.camp_no,
           room_no: employeeForm.room_no,
-          status: employeeForm.status,
+          status: availabilityFields.status,
+          unavailable_from: availabilityFields.unavailable_from,
+          unavailable_days: availabilityFields.unavailable_days,
+          available_again_on: availabilityFields.available_again_on,
+          availability_note: availabilityFields.availability_note,
           notes: employeeForm.notes,
           updated_at: nowStamp()
         };
@@ -665,7 +849,11 @@ export default function App() {
           shift: employeeForm.shift,
           camp_no: employeeForm.camp_no,
           room_no: employeeForm.room_no,
-          status: employeeForm.status,
+          status: availabilityFields.status,
+          unavailable_from: availabilityFields.unavailable_from,
+          unavailable_days: availabilityFields.unavailable_days,
+          available_again_on: availabilityFields.available_again_on,
+          availability_note: availabilityFields.availability_note,
           notes: employeeForm.notes,
           created_at: nowStamp(),
           updated_at: nowStamp()
@@ -698,7 +886,11 @@ export default function App() {
       shift: emp.shift || "",
       camp_no: emp.camp_no || "",
       room_no: emp.room_no || "",
-      status: emp.status || "",
+      status: normalizeEmployeeStatus(emp.status),
+      unavailable_from: emp.unavailable_from || "",
+      unavailable_days: emp.unavailable_days || "",
+      available_again_on: emp.available_again_on || "",
+      availability_note: emp.availability_note || "",
       notes: emp.notes || ""
     });
     setIsEditingEmployee(true);
@@ -879,6 +1071,11 @@ export default function App() {
 
     if (!isProjectActive(project)) {
       alert("You cannot assign employees to a closed / archived project.");
+      return;
+    }
+
+    if (!isEmployeeAvailableForAssignment(employee)) {
+      alert(`This employee is not available for assignment. Current status: ${getEmployeeAvailabilityText(employee)}`);
       return;
     }
 
@@ -1082,7 +1279,25 @@ export default function App() {
           const shift = String(row.shift || row["Shift"] || "").trim();
           const campNo = String(row.camp_no || row["Camp No"] || "").trim();
           const roomNo = String(row.room_no || row["Room No"] || "").trim();
-          const status = String(row.status || row["Status"] || "").trim();
+          const status = normalizeEmployeeStatus(row.status || row["Status"] || EMPLOYEE_STATUS_AVAILABLE);
+          const unavailableFrom = String(
+            row.unavailable_from || row["Unavailable From"] || row["Start Date"] || ""
+          ).trim();
+          const unavailableDaysRaw = row.unavailable_days || row["Unavailable Days"] || row["Days"] || "";
+          const unavailableDays =
+            unavailableDaysRaw === "" || unavailableDaysRaw === null || unavailableDaysRaw === undefined
+              ? null
+              : Number(unavailableDaysRaw) || null;
+          const availableAgainOn =
+            status !== EMPLOYEE_STATUS_AVAILABLE &&
+            status !== EMPLOYEE_STATUS_LEFT_COMPANY &&
+            unavailableFrom &&
+            unavailableDays
+              ? addDaysToDate(unavailableFrom, unavailableDays)
+              : "";
+          const availabilityNote = String(
+            row.availability_note || row["Availability Note"] || row["Availability Notes"] || ""
+          ).trim();
           const notes = String(row.notes || row["Notes"] || "").trim();
 
           if (!nameEn) {
@@ -1102,6 +1317,16 @@ export default function App() {
             camp_no: campNo,
             room_no: roomNo,
             status,
+            unavailable_from: status === EMPLOYEE_STATUS_AVAILABLE ? null : unavailableFrom || null,
+            unavailable_days:
+              status === EMPLOYEE_STATUS_AVAILABLE || status === EMPLOYEE_STATUS_LEFT_COMPANY
+                ? null
+                : unavailableDays,
+            available_again_on:
+              status === EMPLOYEE_STATUS_AVAILABLE || status === EMPLOYEE_STATUS_LEFT_COMPANY
+                ? null
+                : availableAgainOn || null,
+            availability_note: status === EMPLOYEE_STATUS_AVAILABLE ? "" : availabilityNote,
             notes
           };
 
@@ -1266,6 +1491,10 @@ export default function App() {
         e.section,
         e.current_project,
         e.status,
+        e.unavailable_from,
+        e.unavailable_days,
+        e.available_again_on,
+        e.availability_note,
         e.shift,
         e.rig_no,
         e.camp_no,
@@ -1334,7 +1563,11 @@ export default function App() {
         emp.camp_no,
         emp.room_no,
         emp.rig_no,
-        emp.status
+        emp.status,
+        emp.unavailable_from,
+        emp.unavailable_days,
+        emp.available_again_on,
+        emp.availability_note
       ]
         .join(" ")
         .toLowerCase()
@@ -1367,7 +1600,7 @@ export default function App() {
     const q = normalizeText(searchAdminEmployees);
     if (!q) return employees;
     return employees.filter((emp) =>
-      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.section, emp.current_project, emp.shift, emp.rig_no, emp.status]
+      [emp.emp_no, emp.name_en, emp.name_ar, emp.designation, emp.section, emp.current_project, emp.shift, emp.rig_no, emp.status, emp.unavailable_from, emp.unavailable_days, emp.available_again_on, emp.availability_note]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -1667,8 +1900,60 @@ export default function App() {
                 <input type="text" autoComplete="off" name="shift" placeholder="Shift" value={employeeForm.shift} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="camp_no" placeholder="Camp No" value={employeeForm.camp_no} onChange={handleEmployeeChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="room_no" placeholder="Room No" value={employeeForm.room_no} onChange={handleEmployeeChange} style={inputStyle} />
-                <input type="text" autoComplete="off" name="status" placeholder="Status" value={employeeForm.status} onChange={handleEmployeeChange} style={inputStyle} />
-                <input type="text" autoComplete="off" name="notes" placeholder="Notes" value={employeeForm.notes} onChange={handleEmployeeChange} style={{ ...inputStyle, gridColumn: "span 3" }} />
+
+                <select name="status" value={employeeForm.status} onChange={handleEmployeeChange} style={inputStyle}>
+                  {EMPLOYEE_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+
+                <input
+                  type="date"
+                  name="unavailable_from"
+                  value={employeeForm.unavailable_from}
+                  onChange={handleEmployeeChange}
+                  style={inputStyle}
+                  disabled={employeeForm.status === EMPLOYEE_STATUS_AVAILABLE}
+                />
+
+                <input
+                  type="number"
+                  min="1"
+                  name="unavailable_days"
+                  placeholder="Unavailable Days"
+                  value={employeeForm.unavailable_days}
+                  onChange={handleEmployeeChange}
+                  style={inputStyle}
+                  disabled={
+                    employeeForm.status === EMPLOYEE_STATUS_AVAILABLE ||
+                    employeeForm.status === EMPLOYEE_STATUS_LEFT_COMPANY
+                  }
+                />
+
+                <input
+                  type="text"
+                  autoComplete="off"
+                  name="available_again_on"
+                  placeholder="Available Again On"
+                  value={employeeForm.available_again_on}
+                  readOnly
+                  style={{ ...inputStyle, background: "rgba(226,232,240,0.65)" }}
+                />
+
+                <input
+                  type="text"
+                  autoComplete="off"
+                  name="availability_note"
+                  placeholder="Availability Note"
+                  value={employeeForm.availability_note}
+                  onChange={handleEmployeeChange}
+                  style={inputStyle}
+                  disabled={employeeForm.status === EMPLOYEE_STATUS_AVAILABLE}
+                />
+
+                <input type="text" autoComplete="off" name="notes" placeholder="Notes" value={employeeForm.notes} onChange={handleEmployeeChange} style={{ ...inputStyle, gridColumn: "span 4" }} />
               </div>
 
               <div style={actionRow}>
@@ -1701,6 +1986,10 @@ export default function App() {
                       Shift: emp.shift,
                       "Current Project": emp.current_project || "",
                       Status: emp.status || "",
+                      "Unavailable From": emp.unavailable_from || "",
+                      "Unavailable Days": emp.unavailable_days || "",
+                      "Available Again On": emp.available_again_on || "",
+                      "Availability Note": emp.availability_note || "",
                       Notes: emp.notes || ""
                     })),
                     "Employees",
@@ -1730,6 +2019,9 @@ export default function App() {
                           <th style={thStyle}>Shift</th>
                           <th style={thStyle}>Current Project</th>
                           <th style={thStyle}>Status</th>
+                          <th style={thStyle}>Unavailable From</th>
+                          <th style={thStyle}>Days</th>
+                          <th style={thStyle}>Available Again</th>
                           <th className="no-print" style={thStyle}>Actions</th>
                         </tr>
                       </thead>
@@ -1746,6 +2038,9 @@ export default function App() {
                               <td style={tdStyle}>{emp.shift}</td>
                               <td style={tdStyle}>{emp.current_project || "-"}</td>
                               <td style={tdStyle}>{emp.status || "-"}</td>
+                              <td style={tdStyle}>{emp.unavailable_from || "-"}</td>
+                              <td style={tdStyle}>{emp.unavailable_days || "-"}</td>
+                              <td style={tdStyle}>{emp.available_again_on || "-"}</td>
                               <td className="no-print" style={tdStyle}>
                                 <div style={smallActionWrap}>
                                   <button type="button" onClick={() => startEditEmployee(emp)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
@@ -1756,7 +2051,7 @@ export default function App() {
                           ))
                         ) : (
                           <tr>
-                            <td style={emptyTd} colSpan="10">No employees found</td>
+                            <td style={emptyTd} colSpan="13">No employees found</td>
                           </tr>
                         )}
                       </tbody>
@@ -1885,7 +2180,7 @@ export default function App() {
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.emp_no} - {emp.name_en} | {emp.section}
-                      {emp.current_project ? ` | Current: ${emp.current_project}` : " | Unassigned"}
+                      {emp.current_project ? ` | Current: ${emp.current_project}` : " | Unassigned"} | {emp.status}
                     </option>
                   ))}
                 </select>
@@ -2122,6 +2417,10 @@ export default function App() {
                         "Room No": row.room_no || "",
                         "Rig No": row.rig_no || "",
                         Status: row.status || "",
+                        "Unavailable From": row.unavailable_from || "",
+                        "Unavailable Days": row.unavailable_days || "",
+                        "Available Again On": row.available_again_on || "",
+                        "Availability Note": row.availability_note || "",
                         "Assigned At": row.assigned_at || "",
                         Notes: row.assignment_notes || ""
                       }))
@@ -2454,7 +2753,7 @@ function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd }) {
       draggable
       onDragStart={() => onDragStart(employee.id)}
       onDragEnd={onDragEnd}
-      title={`${employee.name_en || ""} | ${employee.designation || ""} | ${employee.section || ""}`}
+      title={`${employee.name_en || ""} | ${employee.designation || ""} | ${employee.section || ""} | ${getEmployeeAvailabilityText(employee)}`}
       style={{
         ...employeeDragCard,
         opacity: isDragging ? 0.45 : 1,
@@ -2466,7 +2765,7 @@ function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd }) {
       </div>
 
       <div style={compactEmployeeMeta} className="truncate-1">
-        {(employee.designation || "No Designation") + " • " + (employee.section || "Others")}
+        {(employee.designation || "No Designation") + " • " + (employee.section || "Others") + " • " + normalizeEmployeeStatus(employee.status)}
       </div>
     </div>
   );
