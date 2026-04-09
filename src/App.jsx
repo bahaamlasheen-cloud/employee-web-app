@@ -1134,7 +1134,10 @@ export default function App() {
       <div style={containerStyle}>
         <div className="no-print" style={heroCard}>
           <div style={heroBadge}>Web App Version</div>
-          <h1 style={heroTitle}>Employee Management & Allocation System</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
+            <img src="/logo.png" alt="logo" style={{ height: 40 }} />
+            <h1 style={heroTitle}>Employee Management & Allocation System</h1>
+          </div>
           <p style={heroSubtitle}>
             Browser-based app with Supabase, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
           </p>
@@ -1779,16 +1782,16 @@ export default function App() {
                               <table style={groupTableStyle}>
                                 <thead>
                                   <tr>
-                                    <th style={{ ...thStyleCenter, width: "6%" }}>SR.NO</th>
-                                    <th style={{ ...thStyle, width: "12%" }}>EMP.NO</th>
-                                    <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME</th>
-                                    <th style={{ ...thStyle, width: "18%" }}>EMPLOYEE NAME AR</th>
-                                    <th style={{ ...thStyle, width: "16%" }}>DESIGNATION</th>
-                                    <th style={{ ...thStyle, width: "14%" }}>SECTION</th>
-                                    <th style={{ ...thStyleCenter, width: "8%" }}>SHIFT</th>
-                                    <th style={{ ...thStyleCenter, width: "10%" }}>PROJECT</th>
-                                    <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
-                                    <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
+                                    <th style={{ ...thStyleCenter, width: "5%" }}>SR.NO</th>
+                                      <th style={{ ...thStyle, width: "10%" }}>EMP.NO</th>
+                                      <th style={{ ...thStyle, width: "16%" }}>EMPLOYEE NAME</th>
+                                      <th style={{ ...thStyle, width: "16%" }}>EMPLOYEE NAME AR</th>
+                                      <th style={{ ...thStyle, width: "14%" }}>DESIGNATION</th>
+                                      <th style={{ ...thStyle, width: "12%" }}>SECTION</th>
+                                      <th style={{ ...thStyleCenter, width: "7%" }}>SHIFT</th>
+                                      <th style={{ ...thStyleCenter, width: "8%" }}>PROJECT</th>
+                                      <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
+                                      <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2105,13 +2108,11 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
 ::-webkit-scrollbar-track { background: #0b1222; border-radius: 999px; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #2dd4bf, #2563eb); border-radius: 999px; }
 ::selection { background: rgba(45, 212, 191, 0.35); }
-@page { size: A4 portrait; margin: 10mm; }
-@media (max-width: 1300px) {
-  .responsive-grid-6 { grid-template-columns: repeat(2, 1fr) !important; }
+@page {
+  size: A4 portrait;
+  margin: 5mm;
 }
-@media (max-width: 1100px) {
-  .responsive-grid-4, .responsive-grid-3, .responsive-grid-2 { grid-template-columns: 1fr !important; }
-}
+
 @media print {
   html, body {
     background: #ffffff !important;
@@ -2135,17 +2136,20 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   .print-page-shell {
     width: 100% !important;
     display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
   .print-area {
+    width: 100% !important;
+    max-width: 100% !important;
     position: static !important;
-    width: 190mm !important;
-    max-width: 190mm !important;
     background: #ffffff !important;
     color: #000000 !important;
     margin: 0 auto !important;
     padding: 0 !important;
     overflow: visible !important;
+    transform: translateY(0) !important;
   }
 
   .no-print {
@@ -2164,9 +2168,9 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   .print-report-title {
     display: block !important;
     text-align: center !important;
-    font-size: 18px !important;
+    font-size: 14px !important;
     font-weight: 800 !important;
-    margin: 0 0 10px 0 !important;
+    margin: 0 0 5px 0 !important;
     color: #000 !important;
     text-transform: uppercase !important;
   }
@@ -2174,15 +2178,15 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   .print-report-subtitle {
     display: block !important;
     text-align: center !important;
-    font-size: 11px !important;
-    margin: 0 0 14px 0 !important;
+    font-size: 9px !important;
+    margin: 0 0 8px 0 !important;
     color: #333 !important;
   }
 
   .designation-group {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-    margin-bottom: 12px !important;
+    margin-bottom: 8px !important;
     border: 1px solid #000 !important;
     border-radius: 0 !important;
     background: #fff !important;
@@ -2194,8 +2198,8 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
     width: 100% !important;
     min-width: 100% !important;
     border-collapse: collapse !important;
-    table-layout: fixed !important;
-    font-size: 10px !important;
+    table-layout: auto !important;
+    font-size: 7px !important;
     background: #fff !important;
   }
 
@@ -2212,30 +2216,38 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
     break-inside: avoid !important;
   }
 
-  th, td {
+  th,
+  td {
     border: 1px solid #000 !important;
-    padding: 5px 4px !important;
-    color: #000 !important;
-    background: #fff !important;
     word-break: break-word !important;
     overflow-wrap: break-word !important;
     vertical-align: middle !important;
-    line-height: 1.3 !important;
   }
 
   th {
+    font-size: 7px !important;
+    padding: 3px 2px !important;
     background: #000 !important;
     color: #fff !important;
     font-weight: 700 !important;
     text-align: center !important;
+    line-height: 1.1 !important;
+  }
+
+  td {
+    font-size: 6px !important;
+    padding: 2px 2px !important;
+    color: #000 !important;
+    background: #fff !important;
+    line-height: 1.1 !important;
   }
 
   .print-group-title {
     text-align: center !important;
-    font-size: 13px !important;
+    font-size: 11px !important;
     font-weight: 800 !important;
     text-decoration: underline !important;
-    margin: 8px 0 6px 0 !important;
+    margin: 5px 0 4px 0 !important;
     color: #000 !important;
   }
 }
