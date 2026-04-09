@@ -25,6 +25,75 @@ const SECTION_OPTIONS = [
   "Others"
 ];
 
+
+const PROJECT_STATUS_ACTIVE = "Active";
+const PROJECT_STATUS_CLOSED = "Closed";
+
+const ASSIGNMENT_ACTIVE_TAG = "[ASSIGNMENT_ACTIVE]";
+const ASSIGNMENT_HISTORY_TAG = "[ASSIGNMENT_HISTORY]";
+
+function normalizeProjectStatus(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (["closed", "close", "archived", "archive", "inactive", "completed", "complete"].includes(normalized)) {
+    return PROJECT_STATUS_CLOSED;
+  }
+
+  return PROJECT_STATUS_ACTIVE;
+}
+
+function isProjectActive(project) {
+  return normalizeProjectStatus(project?.status) === PROJECT_STATUS_ACTIVE;
+}
+
+function cleanAssignmentNotes(notes) {
+  return String(notes || "")
+    .replaceAll(ASSIGNMENT_ACTIVE_TAG, "")
+    .replaceAll(ASSIGNMENT_HISTORY_TAG, "")
+    .replace(/\[CLOSED_AT:[^\]]*\]/g, "")
+    .replace(/\[CLOSE_REASON:[^\]]*\]/g, "")
+    .trim();
+}
+
+function makeActiveAssignmentNotes(notes) {
+  const cleaned = cleanAssignmentNotes(notes);
+  return cleaned ? `${ASSIGNMENT_ACTIVE_TAG} ${cleaned}` : ASSIGNMENT_ACTIVE_TAG;
+}
+
+function makeHistoricalAssignmentNotes(notes, reason = "HISTORY", closedAt = nowStamp()) {
+  const cleaned = cleanAssignmentNotes(notes);
+  const suffix = `${ASSIGNMENT_HISTORY_TAG} [CLOSED_AT:${closedAt}] [CLOSE_REASON:${reason}]`;
+  return cleaned ? `${cleaned} ${suffix}`.trim() : suffix;
+}
+
+function isTaggedAssignmentActive(notes) {
+  const value = String(notes || "");
+  if (value.includes(ASSIGNMENT_HISTORY_TAG)) return false;
+  if (value.includes(ASSIGNMENT_ACTIVE_TAG)) return true;
+  return null;
+}
+
+function findLatestActiveAssignmentRows(assignmentsRows, projectsRows) {
+  const projectById = new Map((projectsRows || []).map((project) => [Number(project.id), project]));
+  const sortedRows = [...(assignmentsRows || [])].sort((a, b) => String(b.assigned_at || "").localeCompare(String(a.assigned_at || "")));
+  const activeByEmployeeId = new Map();
+
+  sortedRows.forEach((row) => {
+    const employeeId = Number(row.employee_id);
+    if (!employeeId || activeByEmployeeId.has(employeeId)) return;
+
+    const project = projectById.get(Number(row.project_id));
+    if (!project || !isProjectActive(project)) return;
+
+    const tagged = isTaggedAssignmentActive(row.notes);
+    if (tagged === false) return;
+
+    activeByEmployeeId.set(employeeId, row);
+  });
+
+  return activeByEmployeeId;
+}
+
 function normalizeSection(value) {
   const normalized = String(value || "").trim().toLowerCase();
 
@@ -65,7 +134,7 @@ const emptyEmployee = {
   shift: "",
   camp_no: "",
   room_no: "",
-  status: "",
+  status: PROJECT_STATUS_ACTIVE,
   notes: ""
 };
 
@@ -207,8 +276,44 @@ async function downloadJsonBackup() {
   URL.revokeObjectURL(url);
 }
 
-async function getEmployeeAssignment(employeeId) {
-  return await fetchMaybeSingle(TABLES.assignments, "employee_id", Number(employeeId));
+async function getActiveEmployeeAssignment(employeeId) {
+  const [assignmentsRows, projectsRows] = await Promise.all([
+    fetchRows(TABLES.assignments, "assigned_at", false),
+    fetchRows(TABLES.projects)
+  ]);
+
+  const activeByEmployeeId = findLatestActiveAssignmentRows(assignmentsRows, projectsRows);
+  return activeByEmployeeId.get(Number(employeeId)) || null;
+}
+
+async function closeAssignmentsForProject(projectId, reason = "PROJECT_CLOSED") {
+  const { data, error } = await supabase
+    .from(TABLES.assignments)
+    .select("*")
+    .eq("project_id", Number(projectId))
+    .order("assigned_at", { ascending: false });
+
+  if (error) throw error;
+
+  const rows = data || [];
+  const activeEmployeeIds = new Set();
+
+  for (const row of rows) {
+    const employeeId = Number(row.employee_id);
+    if (!employeeId || activeEmployeeIds.has(employeeId)) continue;
+
+    const tagged = isTaggedAssignmentActive(row.notes);
+    if (tagged === false) continue;
+
+    const updatedNotes = makeHistoricalAssignmentNotes(row.notes, reason, nowStamp());
+    const { error: updateError } = await supabase
+      .from(TABLES.assignments)
+      .update({ notes: updatedNotes })
+      .eq("id", row.id);
+
+    if (updateError) throw updateError;
+    activeEmployeeIds.add(employeeId);
+  }
 }
 
 async function enrichData() {
@@ -220,12 +325,17 @@ async function enrichData() {
     fetchRows(TABLES.logs, "created_at", false)
   ]);
 
-  const assignmentByEmployeeId = new Map(assignmentsRaw.map((a) => [Number(a.employee_id), a]));
-  const projectById = new Map(projectsRaw.map((p) => [Number(p.id), p]));
+  const normalizedProjects = projectsRaw.map((project) => ({
+    ...project,
+    status: normalizeProjectStatus(project.status)
+  }));
+
+  const activeAssignmentByEmployeeId = findLatestActiveAssignmentRows(assignmentsRaw, normalizedProjects);
+  const projectById = new Map(normalizedProjects.map((p) => [Number(p.id), p]));
   const employeeById = new Map(employeesRaw.map((e) => [Number(e.id), e]));
 
   const employees = employeesRaw.map((emp) => {
-    const assignment = assignmentByEmployeeId.get(Number(emp.id));
+    const assignment = activeAssignmentByEmployeeId.get(Number(emp.id));
     const project = assignment ? projectById.get(Number(assignment.project_id)) : null;
     return {
       ...emp,
@@ -235,12 +345,14 @@ async function enrichData() {
     };
   });
 
-  const projects = projectsRaw.map((project) => ({
+  const projects = normalizedProjects.map((project) => ({
     ...project,
-    employees_count: assignmentsRaw.filter((a) => Number(a.project_id) === Number(project.id)).length
+    employees_count: Array.from(activeAssignmentByEmployeeId.values()).filter(
+      (a) => Number(a.project_id) === Number(project.id)
+    ).length
   }));
 
-  const assignments = assignmentsRaw
+  const assignments = Array.from(activeAssignmentByEmployeeId.values())
     .map((a) => {
       const employee = employeeById.get(Number(a.employee_id));
       const project = projectById.get(Number(a.project_id));
@@ -248,6 +360,7 @@ async function enrichData() {
 
       return {
         ...a,
+        clean_notes: cleanAssignmentNotes(a.notes),
         emp_no: employee.emp_no,
         name_en: employee.name_en,
         name_ar: employee.name_ar,
@@ -261,7 +374,8 @@ async function enrichData() {
         employee_notes: employee.notes,
         project_name: project.project_name,
         project_code: project.project_code,
-        location: project.location
+        location: project.location,
+        project_status: project.status
       };
     })
     .filter(Boolean)
@@ -278,7 +392,8 @@ async function enrichData() {
         name_en: employee.name_en,
         designation: employee.designation,
         section: normalizeSection(employee.section),
-        project_name: project.project_name
+        project_name: project.project_name,
+        project_status: project.status
       };
     })
     .filter(Boolean)
@@ -641,7 +756,7 @@ export default function App() {
           project_name: projectForm.project_name,
           project_code: projectForm.project_code,
           location: projectForm.location,
-          status: projectForm.status,
+          status: normalizeProjectStatus(projectForm.status),
           notes: projectForm.notes,
           updated_at: nowStamp()
         };
@@ -656,7 +771,7 @@ export default function App() {
           project_name: projectForm.project_name,
           project_code: projectForm.project_code,
           location: projectForm.location,
-          status: projectForm.status,
+          status: normalizeProjectStatus(projectForm.status || PROJECT_STATUS_ACTIVE),
           notes: projectForm.notes,
           created_at: nowStamp(),
           updated_at: nowStamp()
@@ -683,7 +798,7 @@ export default function App() {
       project_name: project.project_name || "",
       project_code: project.project_code || "",
       location: project.location || "",
-      status: project.status || "",
+      status: normalizeProjectStatus(project.status),
       notes: project.notes || ""
     });
     setIsEditingProject(true);
@@ -691,42 +806,65 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const deleteProject = async (id) => {
+  const closeProject = async (project) => {
     try {
-      const ok = window.confirm("Are you sure you want to delete this project?");
+      const ok = window.confirm(`Close / archive project ${project.project_name}? This will keep all history and make current staff unassigned.`);
       if (!ok) return;
 
-      const [{ error: workError }, { error: assignError }, { error: projError }] = await Promise.all([
-        supabase.from(TABLES.workEntries).delete().eq("project_id", id),
-        supabase.from(TABLES.assignments).delete().eq("project_id", id),
-        supabase.from(TABLES.projects).delete().eq("id", id)
-      ]);
+      const { error } = await supabase
+        .from(TABLES.projects)
+        .update({ status: PROJECT_STATUS_CLOSED, updated_at: nowStamp() })
+        .eq("id", Number(project.id));
 
-      if (workError) throw workError;
-      if (assignError) throw assignError;
-      if (projError) throw projError;
+      if (error) throw error;
 
-      await logChange("project", id, "DELETE", `Deleted project ID ${id}`);
+      await closeAssignmentsForProject(project.id, "PROJECT_CLOSED");
+      await logChange("project", project.id, "CLOSE", `Closed project ${project.project_name} without deleting history`);
 
-      if (Number(selectedProjectId) === Number(id)) {
-        setSelectedProjectId("");
-        setSelectedProjectEmployees([]);
+      if (Number(selectedProjectId) === Number(project.id)) {
+        setSelectedProjectId(String(project.id));
       }
-      if (Number(projectForm.id) === Number(id)) resetProjectForm();
+      if (Number(projectForm.id) === Number(project.id)) {
+        setProjectForm((prev) => ({ ...prev, status: PROJECT_STATUS_CLOSED }));
+      }
 
       await refreshAll();
-      alert("Project deleted successfully.");
+      alert("Project closed successfully. History was preserved and active assignments were ended.");
     } catch (error) {
       console.error(error);
-      alert(`Failed to delete project: ${error.message}`);
+      alert(`Failed to close project: ${error.message}`);
+    }
+  };
+
+  const reopenProject = async (project) => {
+    try {
+      const ok = window.confirm(`Reopen project ${project.project_name}?`);
+      if (!ok) return;
+
+      const { error } = await supabase
+        .from(TABLES.projects)
+        .update({ status: PROJECT_STATUS_ACTIVE, updated_at: nowStamp() })
+        .eq("id", Number(project.id));
+
+      if (error) throw error;
+
+      await logChange("project", project.id, "REOPEN", `Reopened project ${project.project_name}`);
+
+      if (Number(projectForm.id) === Number(project.id)) {
+        setProjectForm((prev) => ({ ...prev, status: PROJECT_STATUS_ACTIVE }));
+      }
+
+      await refreshAll();
+      alert("Project reopened successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Failed to reopen project: ${error.message}`);
     }
   };
 
   const upsertAssignment = async (employeeId, projectId, noteText = "") => {
-    const rows = await fetchRows(TABLES.assignments);
-    const existing = rows.find((row) => Number(row.employee_id) === Number(employeeId));
-
-    const [projectsRows, employeesRows] = await Promise.all([
+    const [assignmentsRows, projectsRows, employeesRows] = await Promise.all([
+      fetchRows(TABLES.assignments, "assigned_at", false),
       fetchRows(TABLES.projects),
       fetchRows(TABLES.employees)
     ]);
@@ -739,42 +877,61 @@ export default function App() {
       return;
     }
 
+    if (!isProjectActive(project)) {
+      alert("You cannot assign employees to a closed / archived project.");
+      return;
+    }
+
+    const activeByEmployeeId = findLatestActiveAssignmentRows(assignmentsRows, projectsRows);
+    const existing = activeByEmployeeId.get(Number(employeeId));
+
+    if (existing && Number(existing.project_id) === Number(projectId)) {
+      alert("This employee is already assigned to the selected active project.");
+      return;
+    }
+
     if (existing) {
       const oldProject = projectsRows.find((p) => Number(p.id) === Number(existing.project_id));
-
-      const { error } = await supabase
+      const { error: closeError } = await supabase
         .from(TABLES.assignments)
-        .update({
-          project_id: Number(projectId),
-          notes: noteText || existing.notes || "",
-          assigned_at: nowStamp()
-        })
-        .eq("employee_id", Number(employeeId));
+        .update({ notes: makeHistoricalAssignmentNotes(existing.notes, "TRANSFER", nowStamp()) })
+        .eq("id", existing.id);
 
-      if (error) throw error;
+      if (closeError) throw closeError;
+
+      const { error: insertError } = await supabase.from(TABLES.assignments).insert([
+        {
+          employee_id: Number(employeeId),
+          project_id: Number(projectId),
+          assigned_at: nowStamp(),
+          notes: makeActiveAssignmentNotes(noteText)
+        }
+      ]);
+
+      if (insertError) throw insertError;
 
       await logChange(
         "assignment",
         employeeId,
         "TRANSFER",
-        `Transferred ${employee?.name_en || "employee"} from ${oldProject?.project_name || "Unassigned"} to ${project?.project_name || "project"}`
+        `Transferred ${employee?.name_en || "employee"} from ${oldProject?.project_name || "Unassigned"} to ${project?.project_name || "project"} with history preserved`
       );
     } else {
-      const row = {
-        employee_id: Number(employeeId),
-        project_id: Number(projectId),
-        assigned_at: nowStamp(),
-        notes: noteText || ""
-      };
-
-      const { error } = await supabase.from(TABLES.assignments).insert([row]);
+      const { error } = await supabase.from(TABLES.assignments).insert([
+        {
+          employee_id: Number(employeeId),
+          project_id: Number(projectId),
+          assigned_at: nowStamp(),
+          notes: makeActiveAssignmentNotes(noteText)
+        }
+      ]);
       if (error) throw error;
 
       await logChange(
         "assignment",
         employeeId,
         "ASSIGN",
-        `Assigned ${employee?.name_en || "employee"} to ${project?.project_name || "project"}`
+        `Assigned ${employee?.name_en || "employee"} to ${project?.project_name || "project"} with history preserved`
       );
     }
 
@@ -800,14 +957,23 @@ export default function App() {
   const unassignEmployee = async (employeeId, showConfirm = true) => {
     try {
       if (showConfirm) {
-        const ok = window.confirm("Remove this employee from the current project?");
+        const ok = window.confirm("Remove this employee from the current project? History will be preserved.");
         if (!ok) return;
       }
 
-      const { error } = await supabase.from(TABLES.assignments).delete().eq("employee_id", Number(employeeId));
+      const activeAssignment = await getActiveEmployeeAssignment(employeeId);
+      if (!activeAssignment) {
+        if (showConfirm) alert("This employee is already unassigned.");
+        return;
+      }
+
+      const { error } = await supabase
+        .from(TABLES.assignments)
+        .update({ notes: makeHistoricalAssignmentNotes(activeAssignment.notes, "UNASSIGN", nowStamp()) })
+        .eq("id", Number(activeAssignment.id));
       if (error) throw error;
 
-      await logChange("assignment", employeeId, "UNASSIGN", `Unassigned employee ID ${employeeId}`);
+      await logChange("assignment", employeeId, "UNASSIGN", `Unassigned employee ID ${employeeId} with history preserved`);
       await refreshAll();
       if (showConfirm) alert("Employee unassigned successfully.");
     } catch (error) {
@@ -823,10 +989,10 @@ export default function App() {
         return;
       }
 
-      const assignment = await getEmployeeAssignment(workEntryForm.employee_id);
+      const assignment = await getActiveEmployeeAssignment(workEntryForm.employee_id);
 
       if (!assignment) {
-        alert("This employee is not assigned to any project.");
+        alert("This employee is not assigned to any active project.");
         return;
       }
 
@@ -853,21 +1019,8 @@ export default function App() {
     }
   };
 
-  const deleteWorkEntry = async (id) => {
-    try {
-      const ok = window.confirm("Delete this work entry?");
-      if (!ok) return;
-
-      const { error } = await supabase.from(TABLES.workEntries).delete().eq("id", Number(id));
-      if (error) throw error;
-
-      await logChange("work_entry", id, "DELETE", `Deleted work entry ID ${id}`);
-      await refreshAll();
-      alert("Work entry deleted successfully.");
-    } catch (error) {
-      console.error(error);
-      alert(`Failed to delete work entry: ${error.message}`);
-    }
+  const deleteWorkEntry = async () => {
+    alert("Work entries are preserved for history and cannot be deleted from this version.");
   };
 
   const handleImportEmployees = async (e) => {
@@ -1223,8 +1376,9 @@ export default function App() {
 
   const filteredAdminProjects = useMemo(() => {
     const q = normalizeText(searchAdminProjects);
-    if (!q) return projects;
-    return projects.filter((project) =>
+    const activeProjects = projects.filter((project) => isProjectActive(project));
+    if (!q) return activeProjects;
+    return activeProjects.filter((project) =>
       [project.project_name, project.project_code, project.location, project.status, project.notes].join(" ").toLowerCase().includes(q)
     );
   }, [projects, searchAdminProjects]);
@@ -1619,12 +1773,15 @@ export default function App() {
                 <input type="text" autoComplete="off" name="project_name" placeholder="Project Name *" value={projectForm.project_name} onChange={handleProjectChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="project_code" placeholder="Project Code" value={projectForm.project_code} onChange={handleProjectChange} style={inputStyle} />
                 <input type="text" autoComplete="off" name="location" placeholder="Location" value={projectForm.location} onChange={handleProjectChange} style={inputStyle} />
-                <input type="text" autoComplete="off" name="status" placeholder="Status" value={projectForm.status} onChange={handleProjectChange} style={inputStyle} />
+                <select name="status" value={projectForm.status || PROJECT_STATUS_ACTIVE} onChange={handleProjectChange} style={inputStyle}>
+                  <option value={PROJECT_STATUS_ACTIVE}>{PROJECT_STATUS_ACTIVE}</option>
+                  <option value={PROJECT_STATUS_CLOSED}>{PROJECT_STATUS_CLOSED}</option>
+                </select>
                 <input type="text" autoComplete="off" name="notes" placeholder="Notes" value={projectForm.notes} onChange={handleProjectChange} style={{ ...inputStyle, gridColumn: "span 4" }} />
               </div>
 
               <div style={subInfoText}>
-                Current typed project: <strong style={{ color: "#ffffff" }}>{projectForm.project_name || "(empty)"}</strong>
+                Current typed project: <strong style={{ color: "#ffffff" }}>{projectForm.project_name || "(empty)"}</strong> | Status: <strong style={{ color: "#ffffff" }}>{normalizeProjectStatus(projectForm.status || PROJECT_STATUS_ACTIVE)}</strong>
               </div>
 
               <div style={actionRow}>
@@ -1691,7 +1848,11 @@ export default function App() {
                                 <div style={smallActionWrap}>
                                   <button type="button" onClick={() => startEditProject(project)} style={{ ...miniButton, background: buttonWarning }}>Edit</button>
                                   <button type="button" onClick={() => { setSelectedProjectId(String(project.id)); setActiveTab("project_view"); }} style={{ ...miniButton, background: buttonPrimary }}>View Employees</button>
-                                  <button type="button" onClick={() => deleteProject(project.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                                  {isProjectActive(project) ? (
+                                    <button type="button" onClick={() => closeProject(project)} style={{ ...miniButton, background: buttonDanger }}>Close Project</button>
+                                  ) : (
+                                    <button type="button" onClick={() => reopenProject(project)} style={{ ...miniButton, background: buttonSuccess }}>Reopen Project</button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -1713,7 +1874,7 @@ export default function App() {
         {activeTab === "assignments" && (
           <>
             <div className="no-print" style={cardStyle}>
-              <SectionTitle title="Assign / Transfer Employee to Project" />
+              <SectionTitle title="Assign / Transfer Employee to Active Project" />
               <div style={formGrid3} className="responsive-grid-3">
                 <select name="employee_id" value={assignmentForm.employee_id} onChange={handleAssignmentChange} style={inputStyle}>
                   <option value="">Select Employee</option>
@@ -1727,7 +1888,7 @@ export default function App() {
 
                 <select name="project_id" value={assignmentForm.project_id} onChange={handleAssignmentChange} style={inputStyle}>
                   <option value="">Select Project</option>
-                  {projects.map((p) => (
+                  {projects.filter((p) => isProjectActive(p)).map((p) => (
                     <option key={p.id} value={p.id}>{p.project_name}</option>
                   ))}
                 </select>
@@ -1755,7 +1916,7 @@ export default function App() {
                       Project: row.project_name,
                       "Project Code": row.project_code || "",
                       "Assigned At": row.assigned_at,
-                      Notes: row.notes || ""
+                      Notes: row.clean_notes || ""
                     })),
                     "Assignments",
                     "assignments_list"
@@ -1792,7 +1953,7 @@ export default function App() {
                               <td style={tdStyle}>{row.section}</td>
                               <td style={tdStyle}>{row.project_name}</td>
                               <td style={tdStyle}>{row.assigned_at}</td>
-                              <td style={tdStyle}>{row.notes || "-"}</td>
+                              <td style={tdStyle}>{row.clean_notes || "-"}</td>
                               <td className="no-print" style={tdStyle}>
                                 <button type="button" onClick={() => unassignEmployee(row.employee_id)} style={{ ...miniButton, background: buttonDanger }}>Unassign</button>
                               </td>
@@ -1852,7 +2013,7 @@ export default function App() {
                       Project: row.project_name,
                       "Regular Hours": row.regular_hours,
                       "OT Hours": row.overtime_hours,
-                      Notes: row.notes || ""
+                      Notes: row.clean_notes || ""
                     })),
                     "Work Entries",
                     "work_entries"
@@ -1878,7 +2039,7 @@ export default function App() {
                           <th style={thStyle}>Regular Hours</th>
                           <th style={thStyle}>OT Hours</th>
                           <th style={thStyle}>Notes</th>
-                          <th className="no-print" style={thStyle}>Action</th>
+                          <th className="no-print" style={thStyle}>History</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1893,9 +2054,9 @@ export default function App() {
                               <td style={tdStyle}>{row.project_name}</td>
                               <td style={tdStyle}>{row.regular_hours}</td>
                               <td style={tdStyle}>{row.overtime_hours}</td>
-                              <td style={tdStyle}>{row.notes || "-"}</td>
+                              <td style={tdStyle}>{row.clean_notes || "-"}</td>
                               <td className="no-print" style={tdStyle}>
-                                <button type="button" onClick={() => deleteWorkEntry(row.id)} style={{ ...miniButton, background: buttonDanger }}>Delete</button>
+                                <button type="button" onClick={deleteWorkEntry} style={{ ...miniButton, background: buttonMuted }}>Preserved</button>
                               </td>
                             </tr>
                           ))
@@ -1921,7 +2082,7 @@ export default function App() {
                 <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} style={inputStyle}>
                   <option value="">Select Project</option>
                   {projects.map((project) => (
-                    <option key={project.id} value={project.id}>{project.project_name}</option>
+                    <option key={project.id} value={project.id}>{project.project_name} {isProjectActive(project) ? "(Active)" : "(Closed)"}</option>
                   ))}
                 </select>
                 <input
@@ -2063,7 +2224,7 @@ export default function App() {
                 />
               </div>
               <div style={{ ...subInfoText, marginTop: 14 }}>
-                Drag any employee card and drop it on a project column to assign/transfer. Drop it in <strong style={{ color: "#ffffff" }}>Unassigned Pool</strong> to remove from project.
+                Drag any employee card and drop it on an <strong style={{ color: "#ffffff" }}>active project</strong> column to assign/transfer. Drop it in <strong style={{ color: "#ffffff" }}>Unassigned Pool</strong> to remove from project while preserving history.
               </div>
             </div>
 
