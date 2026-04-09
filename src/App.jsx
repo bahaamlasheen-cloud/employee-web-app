@@ -1450,7 +1450,7 @@ export default function App() {
 
   if (loadingAuth) {
     return (
-      <div style={{ color: "white", textAlign: "center", marginTop: 100 }}>
+      <div style={{ color: "#0f172a", textAlign: "center", marginTop: 100, fontWeight: 700 }}>
         Loading...
       </div>
     );
@@ -1469,25 +1469,27 @@ export default function App() {
 
       <div style={containerStyle}>
         <div className="no-print" style={heroCard}>
-          <div style={heroBadge}>Web App Version</div>
+          <div className="hero-shell" style={heroShell}>
+            <div style={heroLogoSide}>
+              <img
+                src="/employee-web-app/logo.png"
+                alt="logo"
+                className="hero-logo"
+              />
+            </div>
 
-          <div className="hero-head">
-            <img
-              src="/employee-web-app/logo.png"
-              alt="logo"
-              className="hero-logo"
-            />
+            <div className="hero-content-box" style={heroContentBox}>
+              <div style={heroBadge}>Web App Version</div>
 
-            <h1 style={heroTitle} className="hero-title">
-              Employee Management & Allocation System
-            </h1>
-          </div>
+              <h1 style={heroTitle} className="hero-title">
+                Employee Management & Allocation System
+              </h1>
 
-          <p style={heroSubtitle}>
-            Browser-based app with Supabase, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
-          </p>
+              <p style={heroSubtitle}>
+                Browser-based app with Supabase, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
+              </p>
 
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 16 }}>
+              <div className="hero-actions" style={heroActions}>
             <button
               type="button"
               onClick={downloadJsonBackup}
@@ -1523,6 +1525,8 @@ export default function App() {
             >
               Logout
             </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2417,7 +2421,7 @@ function LoginPage() {
   };
 
   return (
-    <div style={{ textAlign: "center", marginTop: 100, color: "#fff" }}>
+    <div style={{ textAlign: "center", marginTop: 100, color: "#0f172a" }}>
       <h2>Login</h2>
 
       <input
@@ -2528,9 +2532,9 @@ const globalStyles = `
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; min-height: 100%; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: #0b1222; border-radius: 999px; }
-::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #2dd4bf, #2563eb); border-radius: 999px; }
-::selection { background: rgba(45, 212, 191, 0.35); }
+::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 999px; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #93c5fd, #2563eb); border-radius: 999px; }
+::selection { background: rgba(37, 99, 235, 0.18); }
 
 .truncate-1 {
   white-space: nowrap;
@@ -2538,17 +2542,11 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   text-overflow: ellipsis;
 }
 
-.hero-head {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
 .hero-logo {
-  height: 50px;
-  position: absolute;
-  left: 20px;
+  height: 72px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 @page {
@@ -2574,13 +2572,19 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
     grid-template-columns: 1fr !important;
   }
 
-  .hero-logo {
-    position: static !important;
-    margin-bottom: 12px;
+  .hero-shell {
+    flex-direction: column !important;
+    align-items: flex-start !important;
   }
 
-  .hero-head {
-    flex-direction: column;
+  .hero-content-box {
+    width: 100% !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+  }
+
+  .hero-actions {
+    justify-content: flex-start !important;
   }
 }
 
@@ -2593,12 +2597,13 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
   }
 
   .hero-title {
-    font-size: 26px !important;
+    font-size: 24px !important;
     line-height: 1.25 !important;
+    text-align: left !important;
   }
 
   .hero-logo {
-    height: 42px !important;
+    height: 54px !important;
   }
 
   .print-table-wrap {
@@ -2749,8 +2754,8 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
 const pageStyle = {
   minHeight: "100vh",
   background:
-    "radial-gradient(circle at top left, rgba(37,99,235,0.18), transparent 30%), radial-gradient(circle at top right, rgba(16,185,129,0.12), transparent 24%), linear-gradient(180deg, #06111f 0%, #09172b 45%, #07101e 100%)",
-  color: "#f8fafc",
+    "radial-gradient(circle at top left, rgba(96,165,250,0.16), transparent 28%), radial-gradient(circle at top right, rgba(59,130,246,0.12), transparent 24%), linear-gradient(180deg, #f8fbff 0%, #eef4ff 45%, #e6eefc 100%)",
+  color: "#0f172a",
   padding: 28,
   fontFamily: "Segoe UI, Tahoma, Arial, sans-serif",
   position: "relative",
@@ -2762,7 +2767,7 @@ const backgroundGlowOne = {
   width: 340,
   height: 340,
   borderRadius: "50%",
-  background: "rgba(37, 99, 235, 0.18)",
+  background: "rgba(147, 197, 253, 0.35)",
   filter: "blur(80px)",
   top: -60,
   left: -90,
@@ -2774,7 +2779,7 @@ const backgroundGlowTwo = {
   width: 320,
   height: 320,
   borderRadius: "50%",
-  background: "rgba(16, 185, 129, 0.12)",
+  background: "rgba(191, 219, 254, 0.55)",
   filter: "blur(90px)",
   bottom: -80,
   right: -80,
@@ -2789,52 +2794,84 @@ const containerStyle = {
 };
 
 const heroCard = {
-  background: "linear-gradient(135deg, rgba(15,23,42,0.85), rgba(17,24,39,0.72))",
-  border: "1px solid rgba(148,163,184,0.16)",
+  background: "linear-gradient(135deg, rgba(255,255,255,0.96), rgba(239,246,255,0.96))",
+  border: "1px solid rgba(148,163,184,0.22)",
   borderRadius: 24,
-  padding: "28px 26px",
+  padding: "18px 22px",
   marginBottom: 22,
-  boxShadow: "0 20px 50px rgba(0,0,0,0.28)",
-  backdropFilter: "blur(14px)"
+  boxShadow: "0 14px 34px rgba(15,23,42,0.10)",
+  backdropFilter: "blur(10px)"
 };
 
 const heroBadge = {
   display: "inline-block",
   padding: "6px 12px",
   borderRadius: 999,
-  background: "rgba(45, 212, 191, 0.12)",
-  color: "#5eead4",
+  background: "rgba(37, 99, 235, 0.08)",
+  color: "#1d4ed8",
   fontSize: 13,
   fontWeight: 700,
-  border: "1px solid rgba(45,212,191,0.28)",
-  marginBottom: 12
+  border: "1px solid rgba(37,99,235,0.18)",
+  marginBottom: 8
 };
 
 const heroTitle = {
   margin: 0,
-  fontSize: 42,
+  fontSize: 32,
   fontWeight: 800,
   letterSpacing: "-0.02em",
-  textAlign: "center",
-  color: "#f8fafc"
+  textAlign: "right",
+  color: "#0f172a"
 };
 
 const heroSubtitle = {
-  textAlign: "center",
-  color: "#94a3b8",
-  marginTop: 10,
+  textAlign: "right",
+  color: "#475569",
+  marginTop: 8,
   marginBottom: 0,
-  fontSize: 16
+  fontSize: 15,
+  lineHeight: 1.6,
+  maxWidth: 900
+};
+
+const heroShell = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 20
+};
+
+const heroLogoSide = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "flex-start",
+  minWidth: 120
+};
+
+const heroContentBox = {
+  flex: 1,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "flex-end",
+  textAlign: "right"
+};
+
+const heroActions = {
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  marginTop: 14
 };
 
 const cardStyle = {
-  background: "linear-gradient(180deg, rgba(15,23,42,0.86), rgba(11,18,32,0.92))",
-  border: "1px solid rgba(59,130,246,0.14)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.96), rgba(248,250,252,0.98))",
+  border: "1px solid rgba(148,163,184,0.20)",
   borderRadius: 22,
   padding: 20,
   marginBottom: 22,
-  boxShadow: "0 18px 42px rgba(0,0,0,0.28)",
-  backdropFilter: "blur(12px)"
+  boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
+  backdropFilter: "blur(8px)"
 };
 
 const statsGrid = {
@@ -2845,21 +2882,21 @@ const statsGrid = {
 };
 
 const statCard = {
-  background: "linear-gradient(180deg, rgba(15,23,42,0.95), rgba(16,24,39,0.82))",
-  border: "1px solid rgba(96,165,250,0.14)",
+  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(239,246,255,0.95))",
+  border: "1px solid rgba(147,197,253,0.35)",
   borderRadius: 22,
   padding: 20,
   textAlign: "center",
-  boxShadow: "0 12px 30px rgba(0,0,0,0.22)"
+  boxShadow: "0 10px 24px rgba(15,23,42,0.08)"
 };
 
 const statIcon = { fontSize: 24, marginBottom: 10 };
-const statTitle = { color: "#94a3b8", marginBottom: 10, fontSize: 15, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4 };
-const statValue = { fontSize: 34, fontWeight: 800, color: "#ffffff" };
+const statTitle = { color: "#64748b", marginBottom: 10, fontSize: 15, minHeight: 40, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1.4 };
+const statValue = { fontSize: 34, fontWeight: 800, color: "#0f172a" };
 
 const tabsWrap = { display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 };
-const tabButton = { padding: "12px 18px", borderRadius: 14, border: "1px solid rgba(148,163,184,0.12)", color: "#e2e8f0", cursor: "pointer", fontWeight: 700, fontSize: 14, background: "rgba(15,23,42,0.86)", transition: "all 0.2s ease", boxShadow: "0 8px 20px rgba(0,0,0,0.18)" };
-const activeTabButton = { background: "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(14,165,233,0.88))", color: "#ffffff", border: "1px solid rgba(125,211,252,0.42)", transform: "translateY(-1px)" };
+const tabButton = { padding: "12px 18px", borderRadius: 14, border: "1px solid rgba(148,163,184,0.18)", color: "#334155", cursor: "pointer", fontWeight: 700, fontSize: 14, background: "rgba(255,255,255,0.94)", transition: "all 0.2s ease", boxShadow: "0 8px 18px rgba(15,23,42,0.06)" };
+const activeTabButton = { background: "linear-gradient(135deg, rgba(37,99,235,0.95), rgba(59,130,246,0.88))", color: "#ffffff", border: "1px solid rgba(59,130,246,0.38)", transform: "translateY(-1px)" };
 
 const formGrid4 = { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 };
 const formGrid3 = { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 };
@@ -2872,8 +2909,8 @@ const buttonStyle = { padding: "11px 18px", borderRadius: 14, border: "none", co
 const miniButton = { padding: "8px 12px", borderRadius: 10, border: "none", color: "#ffffff", cursor: "pointer", fontWeight: 700, fontSize: 13, boxShadow: "0 8px 18px rgba(0,0,0,0.18)" };
 const smallActionWrap = { display: "flex", gap: 6, flexWrap: "wrap" };
 const sectionHeaderWrap = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 18 };
-const sectionTitle = { margin: 0, fontSize: 22, fontWeight: 800, color: "#f8fafc", letterSpacing: "-0.01em" };
-const subInfoText = { marginTop: 12, color: "#94a3b8", fontSize: 14 };
+const sectionTitle = { margin: 0, fontSize: 22, fontWeight: 800, color: "#0f172a", letterSpacing: "-0.01em" };
+const subInfoText = { marginTop: 12, color: "#64748b", fontSize: 14 };
 const tableWrap = { overflowX: "auto", borderRadius: 12, background: "#ffffff", border: "1px solid rgba(226,232,240,0.75)", boxShadow: "0 12px 26px rgba(0,0,0,0.16)" };
 const tableStyle = { width: "100%", minWidth: 1100, borderCollapse: "collapse", background: "rgba(255,255,255,0.97)", color: "#0f172a" };
 const groupTableStyle = { width: "100%", minWidth: 1000, borderCollapse: "collapse", background: "#ffffff", color: "#0f172a" };
