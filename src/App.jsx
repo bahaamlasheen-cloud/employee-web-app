@@ -3449,12 +3449,14 @@ button, input, select, textarea {
 @media print {
   @page {
     size: A4 portrait;
-    margin: 12mm;
+    margin: 14mm 12mm 14mm 12mm;
   }
 
   html, body {
     background: #ffffff !important;
     color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -3480,22 +3482,81 @@ button, input, select, textarea {
   }
 
   .print-page-shell {
-    width: 100%;
-    margin: 0 !important;
-    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 1.5mm !important;
+    box-sizing: border-box !important;
   }
 
   .print-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
     box-shadow: none !important;
     border: 1px solid #cbd5e1 !important;
     border-radius: 0 !important;
-    padding: 0 !important;
     background: #ffffff !important;
+    overflow: hidden !important;
+  }
+
+  .print-header,
+  .print-header-top,
+  .print-header-brand,
+  .print-header-titles,
+  .print-header-divider {
+    box-sizing: border-box !important;
+  }
+
+  .print-header {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 0 10px 0 !important;
+    overflow: hidden !important;
+  }
+
+  .print-header-top {
+    gap: 10px !important;
+  }
+
+  .print-header-logo {
+    width: 48px !important;
+    height: 48px !important;
+  }
+
+  .print-company-name {
+    font-size: 15px !important;
+    line-height: 1.15 !important;
+  }
+
+  .print-company-sub,
+  .print-generated-label,
+  .print-generated-date,
+  .print-report-subtitle {
+    font-size: 8.5px !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-report-title {
+    font-size: 15px !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-table-wrap {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
   }
 
   table {
     width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
     border-collapse: collapse !important;
+    table-layout: fixed !important;
     page-break-inside: auto;
   }
 
@@ -3511,10 +3572,14 @@ button, input, select, textarea {
   th, td {
     color: #111827 !important;
     border: 1px solid #cbd5e1 !important;
-    font-size: 10.5px !important;
-    padding-top: 8px !important;
-    padding-bottom: 8px !important;
+    font-size: 8px !important;
+    padding: 5px 4px !important;
     vertical-align: middle !important;
+    box-sizing: border-box !important;
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+    white-space: normal !important;
+    line-height: 1.2 !important;
   }
 
   thead th,
@@ -3523,6 +3588,7 @@ button, input, select, textarea {
     color: #0f172a !important;
     border: 1px solid #94a3b8 !important;
     font-weight: 800 !important;
+    text-align: center !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
@@ -3532,14 +3598,17 @@ button, input, select, textarea {
     color: #111827 !important;
   }
 
-  .print-report-title {
-    font-size: 18px !important;
+  .designation-group {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 8px !important;
+    overflow: hidden !important;
   }
 
-  .print-report-subtitle,
-  .print-generated-date,
-  .print-company-sub {
-    font-size: 10.5px !important;
+  .print-group-title {
+    font-size: 9px !important;
+    line-height: 1.2 !important;
+    margin: 4px 0 !important;
   }
 }
 `;
