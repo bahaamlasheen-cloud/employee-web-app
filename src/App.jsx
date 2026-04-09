@@ -376,6 +376,9 @@ export default function App() {
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [isEditingProject, setIsEditingProject] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
 
   const refreshAll = async () => {
     try {
@@ -398,6 +401,27 @@ export default function App() {
 
   useEffect(() => {
     refreshAll();
+  }, []);
+  useEffect(() => {
+  let isMounted = true;
+
+  supabase.auth.getSession().then(({ data }) => {
+    if (!isMounted) return;
+    setUser(data.session?.user ?? null);
+    setLoadingAuth(false);
+  });
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user ?? null);
+    setLoadingAuth(false);
+  });
+
+  return () => {
+    isMounted = false;
+    subscription.unsubscribe();
+  };
   }, []);
 
   useEffect(() => {
@@ -1235,6 +1259,17 @@ const printCurrentPage = () => {
     }
   };
 
+  if (loadingAuth) {
+  return (
+    <div style={{ color: "white", textAlign: "center", marginTop: 100 }}>
+      Loading...
+    </div>
+  );
+}
+
+if (!user) {
+  return <LoginPage />;
+}
   return (
     <div style={pageStyle}>
       <style>{globalStyles}</style>
@@ -2139,6 +2174,41 @@ const printCurrentPage = () => {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleLogin = async () => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      alert(error.message);
+    }
+  };
+
+  return (
+    <div style={{ textAlign: "center", marginTop: 100 }}>
+      <h2>Login</h2>
+
+      <input
+        placeholder="Email"
+        onChange={(e) => setEmail(e.target.value)}
+      /><br /><br />
+
+      <input
+        type="password"
+        placeholder="Password"
+        onChange={(e) => setPassword(e.target.value)}
+      /><br /><br />
+
+      <button onClick={handleLogin}>Login</button>
     </div>
   );
 }
