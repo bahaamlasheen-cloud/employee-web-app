@@ -1317,7 +1317,15 @@ if (!user) {
             >
               Backup JSON
             </button>
-            <input ref={backupImportRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImportBackup} />
+
+            <input
+              ref={backupImportRef}
+              type="file"
+              accept=".json"
+              style={{ display: "none" }}
+              onChange={handleImportBackup}
+            />
+
             <button
               type="button"
               onClick={() => backupImportRef.current?.click()}
@@ -1326,9 +1334,19 @@ if (!user) {
             >
               Restore JSON
             </button>
-          </div>
-        </div>
 
+            {/* 👇 ضيفه هنا */}
+            <button
+              type="button"
+              onClick={async () => {
+                await supabase.auth.signOut();
+              }}
+              style={{ ...buttonStyle, background: buttonDanger }}
+            >
+              Logout
+            </button>
+          </div>
+        </div>   {/* ← دي كانت ناقصة، إغلاق heroCard */}
         <div className="no-print" style={tabsWrap}>
           {[
             { key: "dashboard", label: "Dashboard" },
