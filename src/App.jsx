@@ -1134,9 +1134,29 @@ export default function App() {
       <div style={containerStyle}>
         <div className="no-print" style={heroCard}>
           <div style={heroBadge}>Web App Version</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, justifyContent: "center" }}>
-            <img src="/employee-web-app/logo.png" alt="logo" style={{ height: 40 }} />
-            <h1 style={heroTitle}>Employee Management & Allocation System</h1>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+            }}
+          >
+            {/* اللوجو */}
+            <img
+              src="/employee-web-app/logo.png"
+              alt="logo"
+              style={{
+                height: 50,
+                position: "absolute",
+                left: 20,
+              }}
+            />
+
+            {/* العنوان */}
+            <h1 style={heroTitle}>
+              Employee Management & Allocation System
+            </h1>
           </div>
           <p style={heroSubtitle}>
             Browser-based app with Supabase, Excel Import/Export, Project Allocation, Work Hours, OT, Logs, and Admin Drag & Drop
