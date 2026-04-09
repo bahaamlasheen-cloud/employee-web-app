@@ -3099,7 +3099,7 @@ button, input, select, textarea {
 }
 
 .hero-logo {
-  height: 72px;
+  height: 110px;
   width: auto;
   object-fit: contain;
   display: block;
