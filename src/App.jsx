@@ -2610,6 +2610,7 @@ export default function App() {
                     }}
                   >
                     <div style={adminColumnHeader}>
+                      <div style={{ color: "#1f2937", fontWeight: 800 }}>
                       <div>{project.project_name}</div>
                       <div style={adminColumnMeta}>
                         {project.project_code || "No Code"} | {project.employees.length} Staff
