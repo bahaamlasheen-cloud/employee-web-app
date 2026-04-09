@@ -1862,7 +1862,7 @@ export default function App() {
               />
 
               <div style={{ ...subInfoText, marginBottom: 16 }}>
-                اضغط على أي مشروع من الشارت علشان يعرضه لوحده ويظهر توزيع العمالة حسب السكاشن.
+               Click on any project to view detailed workforce distribution by section.
               </div>
 
               <div style={dashboardChartGrid} className="dashboard-chart-grid-responsive">
