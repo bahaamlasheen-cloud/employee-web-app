@@ -3789,8 +3789,24 @@ const emptyTd = { padding: 28, textAlign: "center", color: "#64748b", fontWeight
 const projectInfoBox = { background: "linear-gradient(135deg, rgba(30,41,59,0.92), rgba(15,23,42,0.92))", border: "1px solid rgba(59,130,246,0.22)", borderRadius: 14, padding: 14, display: "flex", alignItems: "center", color: "#cbd5e1", fontWeight: "700", minHeight: 48 };
 const designationGroupsWrap = { display: "flex", flexDirection: "column", gap: 14 };
 const designationGroupCard = { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 20, padding: 10 };
-const designationHeader = { marginBottom: 12, padding: "4px 2px" };
-const designationHeaderTitle = { textAlign: "center", color: "#ffffff", fontSize: 24, fontWeight: 800, textDecoration: "underline", letterSpacing: "0.02em" };
+const designationHeader = {
+  marginBottom: 12,
+  padding: "8px 2px 6px",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  borderBottom: "2px solid #1e293b"
+};
+const designationHeaderTitle = {
+  textAlign: "center",
+  color: "#0f172a",
+  fontSize: 18,
+  fontWeight: 800,
+  textDecoration: "underline",
+  letterSpacing: "0.02em",
+  textTransform: "uppercase",
+  lineHeight: 1.2
+};
 const emptyGroupBox = { padding: 30, borderRadius: 18, textAlign: "center", color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.14)", fontWeight: 700 };
 
 const dashboardChartGrid = {
