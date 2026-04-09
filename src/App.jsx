@@ -373,12 +373,29 @@ export default function App() {
   const [draggingEmployeeId, setDraggingEmployeeId] = useState(null);
   const [adminHighlightProjectId, setAdminHighlightProjectId] = useState(null);
 
+  const [collapsedAdminSections, setCollapsedAdminSections] = useState({
+    Engineers: false,
+    Operators: false,
+    "Foreman & Supervisors": false,
+    Riggers: false,
+    Helpers: false,
+    Welders: false,
+    Mechanic: false,
+    Others: false
+  });
+
   const [isEditingEmployee, setIsEditingEmployee] = useState(false);
   const [isEditingProject, setIsEditingProject] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
 
+  const toggleAdminSection = (sectionName) => {
+    setCollapsedAdminSections((prev) => ({
+      ...prev,
+      [sectionName]: !prev[sectionName]
+    }));
+  };
 
   const refreshAll = async () => {
     try {
@@ -402,26 +419,27 @@ export default function App() {
   useEffect(() => {
     refreshAll();
   }, []);
+
   useEffect(() => {
-  let isMounted = true;
+    let isMounted = true;
 
-  supabase.auth.getSession().then(({ data }) => {
-    if (!isMounted) return;
-    setUser(data.session?.user ?? null);
-    setLoadingAuth(false);
-  });
+    supabase.auth.getSession().then(({ data }) => {
+      if (!isMounted) return;
+      setUser(data.session?.user ?? null);
+      setLoadingAuth(false);
+    });
 
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange((_event, session) => {
-    setUser(session?.user ?? null);
-    setLoadingAuth(false);
-  });
+    const {
+      data: { subscription }
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoadingAuth(false);
+    });
 
-  return () => {
-    isMounted = false;
-    subscription.unsubscribe();
-  };
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -850,216 +868,216 @@ export default function App() {
     }
   };
 
-const handleImportEmployees = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+  const handleImportEmployees = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  try {
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const firstSheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[firstSheetName];
-    const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[firstSheetName];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
 
-    if (!json.length) {
-      alert("The Excel file is empty.");
-      e.target.value = "";
+      if (!json.length) {
+        alert("The Excel file is empty.");
+        e.target.value = "";
+        return;
+      }
+
+      const existing = await fetchRows(TABLES.employees);
+
+      const existingByEmpNo = new Map();
+      const existingByName = new Map();
+
+      existing.forEach((item) => {
+        const empNoKey = String(item.emp_no || "").trim();
+        const nameKey = String(item.name_en || "").trim().toLowerCase();
+
+        if (empNoKey) existingByEmpNo.set(empNoKey, item);
+        if (nameKey) existingByName.set(nameKey, item);
+      });
+
+      let added = 0;
+      let updatedByEmpNo = 0;
+      let updatedByName = 0;
+      let skipped = 0;
+      let failed = 0;
+      const failedRows = [];
+
+      for (let i = 0; i < json.length; i++) {
+        const row = json[i];
+
+        try {
+          const empNo = cleanExcelNumber(
+            row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || ""
+          ).trim();
+
+          const nameEn = String(
+            row.name_en || row["Name EN"] || row["Employee Name EN"] || row["Employee"] || ""
+          ).trim();
+
+          const nameAr = String(
+            row.name_ar || row["Name AR"] || row["Employee Name AR"] || ""
+          ).trim();
+
+          const designation = String(row.designation || row["Designation"] || "").trim();
+          const section = normalizeSection(row.section || row["Section"] || row["SECTION"] || "Others");
+          const rigNo = String(row.rig_no || row["Rig No"] || "").trim();
+          const shift = String(row.shift || row["Shift"] || "").trim();
+          const campNo = String(row.camp_no || row["Camp No"] || "").trim();
+          const roomNo = String(row.room_no || row["Room No"] || "").trim();
+          const status = String(row.status || row["Status"] || "").trim();
+          const notes = String(row.notes || row["Notes"] || "").trim();
+
+          if (!nameEn) {
+            skipped += 1;
+            failedRows.push(`Row ${i + 2}: Missing name_en`);
+            continue;
+          }
+
+          const payload = {
+            emp_no: empNo,
+            name_en: nameEn,
+            name_ar: nameAr,
+            designation,
+            section,
+            rig_no: rigNo,
+            shift,
+            camp_no: campNo,
+            room_no: roomNo,
+            status,
+            notes
+          };
+
+          const nameKey = nameEn.toLowerCase();
+
+          let found = null;
+          let matchType = "";
+
+          if (empNo && existingByEmpNo.has(empNo)) {
+            found = existingByEmpNo.get(empNo);
+            matchType = "emp_no";
+          } else if (existingByName.has(nameKey)) {
+            found = existingByName.get(nameKey);
+            matchType = "name_en";
+          }
+
+          if (found) {
+            const updatePayload = {
+              ...payload,
+              updated_at: nowStamp()
+            };
+
+            const { error } = await supabase
+              .from(TABLES.employees)
+              .update(updatePayload)
+              .eq("id", found.id);
+
+            if (error) {
+              failed += 1;
+              failedRows.push(`Row ${i + 2}: ${nameEn} - ${error.message}`);
+              continue;
+            }
+
+            const updatedRecord = {
+              ...found,
+              ...updatePayload
+            };
+
+            if (updatedRecord.emp_no) {
+              existingByEmpNo.set(String(updatedRecord.emp_no).trim(), updatedRecord);
+            }
+            existingByName.set(String(updatedRecord.name_en || "").trim().toLowerCase(), updatedRecord);
+
+            if (matchType === "emp_no") {
+              updatedByEmpNo += 1;
+            } else {
+              updatedByName += 1;
+            }
+          } else {
+            const insertPayload = {
+              ...payload,
+              created_at: nowStamp(),
+              updated_at: nowStamp()
+            };
+
+            const { data, error } = await supabase
+              .from(TABLES.employees)
+              .insert([insertPayload])
+              .select();
+
+            if (error) {
+              failed += 1;
+              failedRows.push(`Row ${i + 2}: ${nameEn} - ${error.message}`);
+              continue;
+            }
+
+            added += 1;
+
+            const inserted = data?.[0] || insertPayload;
+
+            if (inserted.emp_no) {
+              existingByEmpNo.set(String(inserted.emp_no).trim(), inserted);
+            }
+            existingByName.set(String(inserted.name_en || "").trim().toLowerCase(), inserted);
+          }
+        } catch (rowError) {
+          failed += 1;
+          failedRows.push(`Row ${i + 2}: ${rowError.message}`);
+        }
+      }
+
+      await logChange(
+        "employee",
+        "bulk",
+        "IMPORT",
+        `Imported employees from Excel. Added: ${added}, Updated by Emp No: ${updatedByEmpNo}, Updated by Name: ${updatedByName}, Skipped: ${skipped}, Failed: ${failed}`
+      );
+
+      await refreshAll();
+
+      const previewErrors =
+        failedRows.length > 0
+          ? `\n\nFirst errors:\n${failedRows.slice(0, 10).join("\n")}`
+          : "";
+
+      alert(
+        `Import completed.\nAdded: ${added}\nUpdated by Emp No: ${updatedByEmpNo}\nUpdated by Name: ${updatedByName}\nSkipped: ${skipped}\nFailed: ${failed}${previewErrors}`
+      );
+    } catch (error) {
+      console.error(error);
+      alert(`Import failed: ${error.message}`);
+    }
+
+    e.target.value = "";
+  };
+
+  const handleImportBackup = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await replaceAllData(data);
+      await refreshAll();
+      alert("Backup restored successfully.");
+    } catch (error) {
+      console.error(error);
+      alert(`Restore failed: ${error.message}`);
+    }
+
+    e.target.value = "";
+  };
+
+  const printCurrentPage = () => {
+    if (activeTab === "project_view" && !selectedProjectId) {
       return;
     }
 
-    const existing = await fetchRows(TABLES.employees);
-
-    const existingByEmpNo = new Map();
-    const existingByName = new Map();
-
-    existing.forEach((item) => {
-      const empNoKey = String(item.emp_no || "").trim();
-      const nameKey = String(item.name_en || "").trim().toLowerCase();
-
-      if (empNoKey) existingByEmpNo.set(empNoKey, item);
-      if (nameKey) existingByName.set(nameKey, item);
-    });
-
-    let added = 0;
-    let updatedByEmpNo = 0;
-    let updatedByName = 0;
-    let skipped = 0;
-    let failed = 0;
-    const failedRows = [];
-
-    for (let i = 0; i < json.length; i++) {
-      const row = json[i];
-
-      try {
-        const empNo = cleanExcelNumber(
-          row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || ""
-        ).trim();
-
-        const nameEn = String(
-          row.name_en || row["Name EN"] || row["Employee Name EN"] || row["Employee"] || ""
-        ).trim();
-
-        const nameAr = String(
-          row.name_ar || row["Name AR"] || row["Employee Name AR"] || ""
-        ).trim();
-
-        const designation = String(row.designation || row["Designation"] || "").trim();
-        const section = normalizeSection(row.section || row["Section"] || row["SECTION"] || "Others");
-        const rigNo = String(row.rig_no || row["Rig No"] || "").trim();
-        const shift = String(row.shift || row["Shift"] || "").trim();
-        const campNo = String(row.camp_no || row["Camp No"] || "").trim();
-        const roomNo = String(row.room_no || row["Room No"] || "").trim();
-        const status = String(row.status || row["Status"] || "").trim();
-        const notes = String(row.notes || row["Notes"] || "").trim();
-
-        if (!nameEn) {
-          skipped += 1;
-          failedRows.push(`Row ${i + 2}: Missing name_en`);
-          continue;
-        }
-
-        const payload = {
-          emp_no: empNo,
-          name_en: nameEn,
-          name_ar: nameAr,
-          designation,
-          section,
-          rig_no: rigNo,
-          shift,
-          camp_no: campNo,
-          room_no: roomNo,
-          status,
-          notes
-        };
-
-        const nameKey = nameEn.toLowerCase();
-
-        let found = null;
-        let matchType = "";
-
-        if (empNo && existingByEmpNo.has(empNo)) {
-          found = existingByEmpNo.get(empNo);
-          matchType = "emp_no";
-        } else if (existingByName.has(nameKey)) {
-          found = existingByName.get(nameKey);
-          matchType = "name_en";
-        }
-
-        if (found) {
-          const updatePayload = {
-            ...payload,
-            updated_at: nowStamp()
-          };
-
-          const { error } = await supabase
-            .from(TABLES.employees)
-            .update(updatePayload)
-            .eq("id", found.id);
-
-          if (error) {
-            failed += 1;
-            failedRows.push(`Row ${i + 2}: ${nameEn} - ${error.message}`);
-            continue;
-          }
-
-          const updatedRecord = {
-            ...found,
-            ...updatePayload
-          };
-
-          if (updatedRecord.emp_no) {
-            existingByEmpNo.set(String(updatedRecord.emp_no).trim(), updatedRecord);
-          }
-          existingByName.set(String(updatedRecord.name_en || "").trim().toLowerCase(), updatedRecord);
-
-          if (matchType === "emp_no") {
-            updatedByEmpNo += 1;
-          } else {
-            updatedByName += 1;
-          }
-        } else {
-          const insertPayload = {
-            ...payload,
-            created_at: nowStamp(),
-            updated_at: nowStamp()
-          };
-
-          const { data, error } = await supabase
-            .from(TABLES.employees)
-            .insert([insertPayload])
-            .select();
-
-          if (error) {
-            failed += 1;
-            failedRows.push(`Row ${i + 2}: ${nameEn} - ${error.message}`);
-            continue;
-          }
-
-          added += 1;
-
-          const inserted = data?.[0] || insertPayload;
-
-          if (inserted.emp_no) {
-            existingByEmpNo.set(String(inserted.emp_no).trim(), inserted);
-          }
-          existingByName.set(String(inserted.name_en || "").trim().toLowerCase(), inserted);
-        }
-      } catch (rowError) {
-        failed += 1;
-        failedRows.push(`Row ${i + 2}: ${rowError.message}`);
-      }
-    }
-
-    await logChange(
-      "employee",
-      "bulk",
-      "IMPORT",
-      `Imported employees from Excel. Added: ${added}, Updated by Emp No: ${updatedByEmpNo}, Updated by Name: ${updatedByName}, Skipped: ${skipped}, Failed: ${failed}`
-    );
-
-    await refreshAll();
-
-    const previewErrors =
-      failedRows.length > 0
-        ? `\n\nFirst errors:\n${failedRows.slice(0, 10).join("\n")}`
-        : "";
-
-    alert(
-      `Import completed.\nAdded: ${added}\nUpdated by Emp No: ${updatedByEmpNo}\nUpdated by Name: ${updatedByName}\nSkipped: ${skipped}\nFailed: ${failed}${previewErrors}`
-    );
-  } catch (error) {
-    console.error(error);
-    alert(`Import failed: ${error.message}`);
-  }
-
-  e.target.value = "";
-};
-
-const handleImportBackup = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-
-  try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    await replaceAllData(data);
-    await refreshAll();
-    alert("Backup restored successfully.");
-  } catch (error) {
-    console.error(error);
-    alert(`Restore failed: ${error.message}`);
-  }
-
-  e.target.value = "";
-};
-
-const printCurrentPage = () => {
-  if (activeTab === "project_view" && !selectedProjectId) {
-    return;
-  }
-
-  window.print();
-};
+    window.print();
+  };
 
   const filteredDashboardRows = useMemo(() => {
     const q = normalizeText(searchDashboard);
@@ -1209,10 +1227,25 @@ const printCurrentPage = () => {
     );
   }, [projects, searchAdminProjects]);
 
-  const adminUnassignedEmployees = useMemo(() => {
-    return filteredAdminEmployees
-      .filter((emp) => !emp.current_project_id)
-      .sort((a, b) => String(a.name_en || "").localeCompare(String(b.name_en || "")));
+  const adminUnassignedGrouped = useMemo(() => {
+    const unassigned = filteredAdminEmployees.filter((emp) => !emp.current_project_id);
+
+    const groupedMap = new Map();
+    SECTION_OPTIONS.forEach((section) => groupedMap.set(section, []));
+
+    unassigned.forEach((emp) => {
+      const section = normalizeSection(emp.section);
+      if (!groupedMap.has(section)) groupedMap.set(section, []);
+      groupedMap.get(section).push(emp);
+    });
+
+    return SECTION_OPTIONS.map((section) => ({
+      section,
+      items: (groupedMap.get(section) || []).sort((a, b) =>
+        String(a.name_en || "").localeCompare(String(b.name_en || ""))
+      ),
+      count: (groupedMap.get(section) || []).length
+    }));
   }, [filteredAdminEmployees]);
 
   const adminProjectBoards = useMemo(() => {
@@ -1260,16 +1293,17 @@ const printCurrentPage = () => {
   };
 
   if (loadingAuth) {
-  return (
-    <div style={{ color: "white", textAlign: "center", marginTop: 100 }}>
-      Loading...
-    </div>
-  );
-}
+    return (
+      <div style={{ color: "white", textAlign: "center", marginTop: 100 }}>
+        Loading...
+      </div>
+    );
+  }
 
-if (!user) {
-  return <LoginPage />;
-}
+  if (!user) {
+    return <LoginPage />;
+  }
+
   return (
     <div style={pageStyle}>
       <style>{globalStyles}</style>
@@ -1285,21 +1319,19 @@ if (!user) {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              position: "relative",
+              position: "relative"
             }}
           >
-            {/* اللوجو */}
             <img
               src="/employee-web-app/logo.png"
               alt="logo"
               style={{
                 height: 50,
                 position: "absolute",
-                left: 20,
+                left: 20
               }}
             />
 
-            {/* العنوان */}
             <h1 style={heroTitle}>
               Employee Management & Allocation System
             </h1>
@@ -1335,7 +1367,6 @@ if (!user) {
               Restore JSON
             </button>
 
-            {/* 👇 ضيفه هنا */}
             <button
               type="button"
               onClick={async () => {
@@ -1346,7 +1377,8 @@ if (!user) {
               Logout
             </button>
           </div>
-        </div>   {/* ← دي كانت ناقصة، إغلاق heroCard */}
+        </div>
+
         <div className="no-print" style={tabsWrap}>
           {[
             { key: "dashboard", label: "Dashboard" },
@@ -1967,15 +1999,15 @@ if (!user) {
                                 <thead>
                                   <tr>
                                     <th style={{ ...thStyleCenter, width: "5%" }}>SR.NO</th>
-                                      <th style={{ ...thStyle, width: "10%" }}>EMP.NO</th>
-                                      <th style={{ ...thStyle, width: "16%" }}>EMPLOYEE NAME</th>
-                                      <th style={{ ...thStyle, width: "16%" }}>EMPLOYEE NAME AR</th>
-                                      <th style={{ ...thStyle, width: "14%" }}>DESIGNATION</th>
-                                      <th style={{ ...thStyle, width: "12%" }}>SECTION</th>
-                                      <th style={{ ...thStyleCenter, width: "7%" }}>SHIFT</th>
-                                      <th style={{ ...thStyleCenter, width: "8%" }}>PROJECT</th>
-                                      <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
-                                      <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
+                                    <th style={{ ...thStyle, width: "10%" }}>EMP.NO</th>
+                                    <th style={{ ...thStyle, width: "16%" }}>EMPLOYEE NAME</th>
+                                    <th style={{ ...thStyle, width: "16%" }}>EMPLOYEE NAME AR</th>
+                                    <th style={{ ...thStyle, width: "14%" }}>DESIGNATION</th>
+                                    <th style={{ ...thStyle, width: "12%" }}>SECTION</th>
+                                    <th style={{ ...thStyleCenter, width: "7%" }}>SHIFT</th>
+                                    <th style={{ ...thStyleCenter, width: "8%" }}>PROJECT</th>
+                                    <th style={{ ...thStyleCenter, width: "6%" }}>CAMP NO</th>
+                                    <th style={{ ...thStyleCenter, width: "6%" }}>ROOM NO</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -2059,18 +2091,43 @@ if (!user) {
                   await onDropToUnassigned();
                 }}
               >
-                <div style={adminColumnHeader}>Unassigned Pool ({adminUnassignedEmployees.length})</div>
+                <div style={adminColumnHeader}>
+                  Unassigned Pool ({adminUnassignedGrouped.reduce((sum, group) => sum + group.count, 0)})
+                </div>
+
                 <div style={adminCardsWrap}>
-                  {adminUnassignedEmployees.length > 0 ? (
-                    adminUnassignedEmployees.map((emp) => (
-                      <EmployeeDragCard
-                        key={emp.id}
-                        employee={emp}
-                        isDragging={Number(draggingEmployeeId) === Number(emp.id)}
-                        onDragStart={onDragStartEmployee}
-                        onDragEnd={onDragEndEmployee}
-                        onEdit={() => startEditEmployee(emp)}
-                      />
+                  {adminUnassignedGrouped.some((group) => group.count > 0) ? (
+                    adminUnassignedGrouped.map((group) => (
+                      <div key={group.section} style={adminSectionGroupCard}>
+                        <button
+                          type="button"
+                          onClick={() => toggleAdminSection(group.section)}
+                          style={adminSectionHeaderButton}
+                        >
+                          <span>
+                            {collapsedAdminSections[group.section] ? "▶" : "▼"} {group.section} ({group.count})
+                          </span>
+                        </button>
+
+                        {!collapsedAdminSections[group.section] && (
+                          <div style={{ ...adminCardsWrap, marginTop: 10 }}>
+                            {group.count > 0 ? (
+                              group.items.map((emp) => (
+                                <EmployeeDragCard
+                                  key={emp.id}
+                                  employee={emp}
+                                  isDragging={Number(draggingEmployeeId) === Number(emp.id)}
+                                  onDragStart={onDragStartEmployee}
+                                  onDragEnd={onDragEndEmployee}
+                                  onEdit={() => startEditEmployee(emp)}
+                                />
+                              ))
+                            ) : (
+                              <div style={adminEmptyMiniBox}>No employees in this section</div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ))
                   ) : (
                     <div style={emptyGroupBox}>No unassigned employees</div>
@@ -2203,7 +2260,7 @@ function LoginPage() {
   const handleLogin = async () => {
     const { error } = await supabase.auth.signInWithPassword({
       email,
-      password,
+      password
     });
 
     if (error) {
@@ -2327,6 +2384,7 @@ html, body, #root { margin: 0; padding: 0; min-height: 100%; }
 ::-webkit-scrollbar-track { background: #0b1222; border-radius: 999px; }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #2dd4bf, #2563eb); border-radius: 999px; }
 ::selection { background: rgba(45, 212, 191, 0.35); }
+
 @page {
   size: A4 portrait;
   margin: 5mm;
@@ -2651,6 +2709,40 @@ const adminCardsWrap = {
   display: "flex",
   flexDirection: "column",
   gap: 12
+};
+
+const adminSectionGroupCard = {
+  background: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(148,163,184,0.14)",
+  borderRadius: 16,
+  padding: 10
+};
+
+const adminSectionHeaderButton = {
+  width: "100%",
+  border: "none",
+  borderRadius: 12,
+  padding: "12px 14px",
+  background: "linear-gradient(135deg, rgba(37,99,235,0.16), rgba(14,165,233,0.10))",
+  color: "#ffffff",
+  fontWeight: 800,
+  fontSize: 14,
+  textAlign: "left",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between"
+};
+
+const adminEmptyMiniBox = {
+  padding: 12,
+  borderRadius: 12,
+  textAlign: "center",
+  color: "#cbd5e1",
+  background: "rgba(255,255,255,0.03)",
+  border: "1px dashed rgba(255,255,255,0.12)",
+  fontWeight: 600,
+  fontSize: 13
 };
 
 const employeeDragCard = {
