@@ -826,7 +826,7 @@ export default function App() {
     }
   };
 
-  const handleImportEmployees = async (e) => {
+const handleImportEmployees = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
 
@@ -844,12 +844,21 @@ export default function App() {
     }
 
     const existing = await fetchRows(TABLES.employees);
-    const existingMap = new Map(
-      existing.map((item) => [String(item.emp_no || "").trim(), item])
-    );
+
+    const existingByEmpNo = new Map();
+    const existingByName = new Map();
+
+    existing.forEach((item) => {
+      const empNoKey = String(item.emp_no || "").trim();
+      const nameKey = String(item.name_en || "").trim().toLowerCase();
+
+      if (empNoKey) existingByEmpNo.set(empNoKey, item);
+      if (nameKey) existingByName.set(nameKey, item);
+    });
 
     let added = 0;
-    let updated = 0;
+    let updatedByEmpNo = 0;
+    let updatedByName = 0;
     let skipped = 0;
     let failed = 0;
     const failedRows = [];
@@ -860,77 +869,116 @@ export default function App() {
       try {
         const empNo = cleanExcelNumber(
           row.emp_no || row["Emp No"] || row["EMP NO"] || row["Employee No"] || ""
-        );
+        ).trim();
 
-        if (!empNo) {
+        const nameEn = String(
+          row.name_en || row["Name EN"] || row["Employee Name EN"] || row["Employee"] || ""
+        ).trim();
+
+        const nameAr = String(
+          row.name_ar || row["Name AR"] || row["Employee Name AR"] || ""
+        ).trim();
+
+        const designation = String(row.designation || row["Designation"] || "").trim();
+        const section = normalizeSection(row.section || row["Section"] || row["SECTION"] || "Others");
+        const rigNo = String(row.rig_no || row["Rig No"] || "").trim();
+        const shift = String(row.shift || row["Shift"] || "").trim();
+        const campNo = String(row.camp_no || row["Camp No"] || "").trim();
+        const roomNo = String(row.room_no || row["Room No"] || "").trim();
+        const status = String(row.status || row["Status"] || "").trim();
+        const notes = String(row.notes || row["Notes"] || "").trim();
+
+        if (!nameEn) {
           skipped += 1;
-          failedRows.push(`Row ${i + 2}: Missing emp_no`);
+          failedRows.push(`Row ${i + 2}: Missing name_en`);
           continue;
         }
 
         const payload = {
-          emp_no: String(empNo).trim(),
-          name_en: String(row.name_en || row["Name EN"] || row["Employee Name EN"] || "").trim(),
-          name_ar: String(row.name_ar || row["Name AR"] || row["Employee Name AR"] || "").trim(),
-          designation: String(row.designation || row["Designation"] || "").trim(),
-          section: normalizeSection(row.section || row["Section"] || row["SECTION"] || "Others"),
-          rig_no: String(row.rig_no || row["Rig No"] || "").trim(),
-          shift: String(row.shift || row["Shift"] || "").trim(),
-          camp_no: String(row.camp_no || row["Camp No"] || "").trim(),
-          room_no: String(row.room_no || row["Room No"] || "").trim(),
-          status: String(row.status || row["Status"] || "").trim(),
-          notes: String(row.notes || row["Notes"] || "").trim()
+          emp_no: empNo,
+          name_en: nameEn,
+          name_ar: nameAr,
+          designation,
+          section,
+          rig_no: rigNo,
+          shift,
+          camp_no: campNo,
+          room_no: roomNo,
+          status,
+          notes
         };
 
-        if (!payload.name_en) {
-          skipped += 1;
-          failedRows.push(`Row ${i + 2}: Missing name_en for Emp No ${payload.emp_no}`);
-          continue;
+        const nameKey = nameEn.toLowerCase();
+
+        let found = null;
+        let matchType = "";
+
+        if (empNo && existingByEmpNo.has(empNo)) {
+          found = existingByEmpNo.get(empNo);
+          matchType = "emp_no";
+        } else if (existingByName.has(nameKey)) {
+          found = existingByName.get(nameKey);
+          matchType = "name_en";
         }
 
-        const found = existingMap.get(payload.emp_no);
-
         if (found) {
+          const updatePayload = {
+            ...payload,
+            updated_at: nowStamp()
+          };
+
           const { error } = await supabase
             .from(TABLES.employees)
-            .update({
-              ...payload,
-              updated_at: nowStamp()
-            })
+            .update(updatePayload)
             .eq("id", found.id);
 
           if (error) {
             failed += 1;
-            failedRows.push(`Row ${i + 2}: ${payload.emp_no} - ${error.message}`);
+            failedRows.push(`Row ${i + 2}: ${nameEn} - ${error.message}`);
             continue;
           }
 
-          updated += 1;
+          const updatedRecord = {
+            ...found,
+            ...updatePayload
+          };
+
+          if (updatedRecord.emp_no) {
+            existingByEmpNo.set(String(updatedRecord.emp_no).trim(), updatedRecord);
+          }
+          existingByName.set(String(updatedRecord.name_en || "").trim().toLowerCase(), updatedRecord);
+
+          if (matchType === "emp_no") {
+            updatedByEmpNo += 1;
+          } else {
+            updatedByName += 1;
+          }
         } else {
+          const insertPayload = {
+            ...payload,
+            created_at: nowStamp(),
+            updated_at: nowStamp()
+          };
+
           const { data, error } = await supabase
             .from(TABLES.employees)
-            .insert([
-              {
-                ...payload,
-                created_at: nowStamp(),
-                updated_at: nowStamp()
-              }
-            ])
+            .insert([insertPayload])
             .select();
 
           if (error) {
             failed += 1;
-            failedRows.push(`Row ${i + 2}: ${payload.emp_no} - ${error.message}`);
+            failedRows.push(`Row ${i + 2}: ${nameEn} - ${error.message}`);
             continue;
           }
 
           added += 1;
 
-          if (data?.[0]) {
-            existingMap.set(payload.emp_no, data[0]);
-          } else {
-            existingMap.set(payload.emp_no, { emp_no: payload.emp_no });
+          const inserted = data?.[0] || insertPayload;
+
+          if (inserted.emp_no) {
+            existingByEmpNo.set(String(inserted.emp_no).trim(), inserted);
           }
+          existingByName.set(String(inserted.name_en || "").trim().toLowerCase(), inserted);
         }
       } catch (rowError) {
         failed += 1;
@@ -942,7 +990,7 @@ export default function App() {
       "employee",
       "bulk",
       "IMPORT",
-      `Imported employees from Excel. Added: ${added}, Updated: ${updated}, Skipped: ${skipped}, Failed: ${failed}`
+      `Imported employees from Excel. Added: ${added}, Updated by Emp No: ${updatedByEmpNo}, Updated by Name: ${updatedByName}, Skipped: ${skipped}, Failed: ${failed}`
     );
 
     await refreshAll();
@@ -953,7 +1001,7 @@ export default function App() {
         : "";
 
     alert(
-      `Import completed.\nAdded: ${added}\nUpdated: ${updated}\nSkipped: ${skipped}\nFailed: ${failed}${previewErrors}`
+      `Import completed.\nAdded: ${added}\nUpdated by Emp No: ${updatedByEmpNo}\nUpdated by Name: ${updatedByName}\nSkipped: ${skipped}\nFailed: ${failed}${previewErrors}`
     );
   } catch (error) {
     console.error(error);
