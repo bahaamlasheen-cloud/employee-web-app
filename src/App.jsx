@@ -604,6 +604,7 @@ export default function App() {
   const [searchLogs, setSearchLogs] = useState("");
   const [searchAdminEmployees, setSearchAdminEmployees] = useState("");
   const [searchAdminProjects, setSearchAdminProjects] = useState("");
+  const [selectedDashboardProjectId, setSelectedDashboardProjectId] = useState("");
 
   const [draggingEmployeeId, setDraggingEmployeeId] = useState(null);
   const [adminHighlightProjectId, setAdminHighlightProjectId] = useState(null);
@@ -1479,6 +1480,48 @@ export default function App() {
     );
   }, [hoursSummary, searchDashboard]);
 
+  const dashboardProjectBars = useMemo(() => {
+    return [...projects]
+      .map((project) => {
+        const projectAssignments = assignments.filter((assignment) => Number(assignment.project_id) === Number(project.id));
+        const sectionCounts = SECTION_OPTIONS.reduce((acc, section) => {
+          acc[section] = 0;
+          return acc;
+        }, {});
+
+        projectAssignments.forEach((assignment) => {
+          const section = normalizeSection(assignment.section);
+          sectionCounts[section] = (sectionCounts[section] || 0) + 1;
+        });
+
+        return {
+          ...project,
+          total: projectAssignments.length,
+          sectionCounts
+        };
+      })
+      .sort((a, b) => {
+        if (Number(b.total) !== Number(a.total)) return Number(b.total) - Number(a.total);
+        return String(a.project_name || "").localeCompare(String(b.project_name || ""));
+      });
+  }, [projects, assignments]);
+
+  const selectedDashboardProject = useMemo(() => {
+    return dashboardProjectBars.find((project) => String(project.id) === String(selectedDashboardProjectId)) || null;
+  }, [dashboardProjectBars, selectedDashboardProjectId]);
+
+  const dashboardSectionRows = useMemo(() => {
+    if (!selectedDashboardProject) return [];
+
+    return SECTION_OPTIONS.map((section) => ({
+      section,
+      count: Number(selectedDashboardProject.sectionCounts?.[section] || 0)
+    })).sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return SECTION_OPTIONS.indexOf(a.section) - SECTION_OPTIONS.indexOf(b.section);
+    });
+  }, [selectedDashboardProject]);
+
   const filteredEmployees = useMemo(() => {
     const q = normalizeText(searchEmployee);
     if (!q) return employees;
@@ -1548,6 +1591,12 @@ export default function App() {
   const selectedProject = useMemo(() => {
     return projects.find((p) => String(p.id) === String(selectedProjectId)) || null;
   }, [projects, selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedDashboardProjectId && !dashboardProjectBars.some((project) => String(project.id) === String(selectedDashboardProjectId))) {
+      setSelectedDashboardProjectId("");
+    }
+  }, [dashboardProjectBars, selectedDashboardProjectId]);
 
   const projectViewFilteredEmployees = useMemo(() => {
     const q = normalizeText(searchProjectView);
@@ -1794,6 +1843,54 @@ export default function App() {
               <StatCard title="Unassigned Employees" value={stats.unassignedEmployees} icon="📂" />
               <StatCard title="Regular Hours" value={stats.totalRegularHours} icon="⏱️" />
               <StatCard title="Overtime Hours" value={stats.totalOvertimeHours} icon="🌙" />
+            </div>
+
+            <div style={cardStyle}>
+              <SectionHeaderWithActions
+                title="Projects Workforce Dashboard"
+                extraButtons={
+                  selectedDashboardProject ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDashboardProjectId("")}
+                      style={{ ...buttonStyle, background: buttonMuted }}
+                    >
+                      Show All Projects
+                    </button>
+                  ) : null
+                }
+              />
+
+              <div style={{ ...subInfoText, marginBottom: 16 }}>
+                اضغط على أي مشروع من الشارت علشان يعرضه لوحده ويظهر توزيع العمالة حسب السكاشن.
+              </div>
+
+              <div style={dashboardChartGrid} className="dashboard-chart-grid-responsive">
+                <div style={dashboardChartCard}>
+                  <div style={dashboardChartTitle}>Project Headcount</div>
+                  <ProjectHeadcountBarChart
+                    projects={dashboardProjectBars}
+                    selectedProjectId={selectedDashboardProjectId}
+                    onSelectProject={setSelectedDashboardProjectId}
+                  />
+                </div>
+
+                <div style={dashboardChartCard}>
+                  <div style={dashboardChartTitle}>
+                    {selectedDashboardProject
+                      ? `Section Breakdown - ${selectedDashboardProject.project_name}`
+                      : "Section Breakdown"}
+                  </div>
+
+                  {selectedDashboardProject ? (
+                    <ProjectSectionBreakdown rows={dashboardSectionRows} />
+                  ) : (
+                    <div style={dashboardEmptyState}>
+                      اختار مشروع من الشارت علشان يظهر توزيع العمالة حسب السكاشن.
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div style={cardStyle}>
@@ -2786,6 +2883,85 @@ function EmployeeDragCard({ employee, isDragging, onDragStart, onDragEnd }) {
   );
 }
 
+function ProjectHeadcountBarChart({ projects, selectedProjectId, onSelectProject }) {
+  const maxValue = Math.max(...projects.map((project) => Number(project.total || 0)), 1);
+
+  if (!projects.length) {
+    return <div style={dashboardEmptyState}>No projects found.</div>;
+  }
+
+  return (
+    <div style={dashboardBarsWrap}>
+      {projects.map((project) => {
+        const isSelected = String(selectedProjectId) === String(project.id);
+        const widthPercent = Math.max((Number(project.total || 0) / maxValue) * 100, project.total > 0 ? 8 : 2);
+
+        return (
+          <button
+            key={project.id}
+            type="button"
+            onClick={() => onSelectProject(String(project.id))}
+            style={{
+              ...dashboardBarRow,
+              ...(isSelected ? dashboardBarRowActive : {})
+            }}
+          >
+            <div style={dashboardBarHeader}>
+              <div style={dashboardBarLabelWrap}>
+                <div style={dashboardBarLabel} className="truncate-1">{project.project_name || "Unnamed Project"}</div>
+                <div style={dashboardBarMeta}>
+                  {project.project_code || "No Code"} | {project.status}
+                </div>
+              </div>
+              <div style={dashboardBarValue}>{project.total}</div>
+            </div>
+
+            <div style={dashboardBarTrack}>
+              <div
+                style={{
+                  ...dashboardBarFill,
+                  width: `${widthPercent}%`
+                }}
+              />
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProjectSectionBreakdown({ rows }) {
+  const maxValue = Math.max(...rows.map((row) => Number(row.count || 0)), 1);
+
+  if (!rows.length) {
+    return <div style={dashboardEmptyState}>No section data found.</div>;
+  }
+
+  return (
+    <div style={dashboardBarsWrap}>
+      {rows.map((row) => {
+        const widthPercent = Math.max((Number(row.count || 0) / maxValue) * 100, row.count > 0 ? 8 : 2);
+
+        return (
+          <div key={row.section} style={dashboardSectionRow}>
+            <div style={dashboardSectionLabel}>{row.section}</div>
+            <div style={dashboardBarTrackSoft}>
+              <div
+                style={{
+                  ...dashboardSectionFill,
+                  width: `${widthPercent}%`
+                }}
+              />
+            </div>
+            <div style={dashboardSectionValue}>{row.count}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function StatCard({ title, value, icon }) {
   return (
     <div style={statCard}>
@@ -2926,6 +3102,10 @@ button, input, select, textarea {
   .responsive-grid-2,
   .responsive-grid-6 {
     grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .dashboard-chart-grid-responsive {
+    grid-template-columns: 1fr !important;
   }
 
   .admin-layout-responsive {
@@ -3290,6 +3470,163 @@ const designationGroupCard = { background: "rgba(255,255,255,0.03)", border: "1p
 const designationHeader = { marginBottom: 12, padding: "4px 2px" };
 const designationHeaderTitle = { textAlign: "center", color: "#ffffff", fontSize: 24, fontWeight: 800, textDecoration: "underline", letterSpacing: "0.02em" };
 const emptyGroupBox = { padding: 30, borderRadius: 18, textAlign: "center", color: "#cbd5e1", background: "rgba(255,255,255,0.04)", border: "1px dashed rgba(255,255,255,0.14)", fontWeight: 700 };
+
+const dashboardChartGrid = {
+  display: "grid",
+  gridTemplateColumns: "1.1fr 0.9fr",
+  gap: 18,
+  alignItems: "start"
+};
+
+const dashboardChartCard = {
+  background: "linear-gradient(180deg, rgba(255,255,255,0.98), rgba(248,250,252,0.96))",
+  border: "1px solid rgba(226,232,240,0.95)",
+  borderRadius: 20,
+  padding: 18,
+  boxShadow: "0 16px 34px rgba(15,23,42,0.08)"
+};
+
+const dashboardChartTitle = {
+  marginBottom: 14,
+  color: "#0f172a",
+  fontSize: 18,
+  fontWeight: 800,
+  letterSpacing: "-0.02em",
+  lineHeight: 1.25
+};
+
+const dashboardBarsWrap = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12
+};
+
+const dashboardBarRow = {
+  width: "100%",
+  border: "1px solid rgba(226,232,240,0.95)",
+  borderRadius: 16,
+  padding: 14,
+  background: "#ffffff",
+  cursor: "pointer",
+  textAlign: "left",
+  transition: "all 0.2s ease",
+  boxShadow: "0 10px 24px rgba(15,23,42,0.05)"
+};
+
+const dashboardBarRowActive = {
+  border: "1px solid rgba(37,99,235,0.55)",
+  boxShadow: "0 14px 30px rgba(37,99,235,0.14)",
+  background: "linear-gradient(180deg, rgba(239,246,255,0.98), rgba(255,255,255,0.98))"
+};
+
+const dashboardBarHeader = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  marginBottom: 10
+};
+
+const dashboardBarLabelWrap = {
+  minWidth: 0,
+  flex: 1
+};
+
+const dashboardBarLabel = {
+  color: "#0f172a",
+  fontSize: 15,
+  fontWeight: 800,
+  letterSpacing: "-0.02em",
+  lineHeight: 1.3
+};
+
+const dashboardBarMeta = {
+  marginTop: 4,
+  color: "#64748b",
+  fontSize: 12,
+  fontWeight: 700,
+  letterSpacing: "0.01em",
+  lineHeight: 1.35
+};
+
+const dashboardBarValue = {
+  minWidth: 48,
+  textAlign: "center",
+  borderRadius: 999,
+  padding: "6px 10px",
+  background: "rgba(37,99,235,0.10)",
+  color: "#1d4ed8",
+  fontSize: 13,
+  fontWeight: 800,
+  letterSpacing: "-0.01em"
+};
+
+const dashboardBarTrack = {
+  width: "100%",
+  height: 12,
+  background: "#e2e8f0",
+  borderRadius: 999,
+  overflow: "hidden"
+};
+
+const dashboardBarFill = {
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #2563eb 0%, #38bdf8 100%)"
+};
+
+const dashboardSectionRow = {
+  display: "grid",
+  gridTemplateColumns: "minmax(120px, 180px) 1fr 48px",
+  gap: 12,
+  alignItems: "center"
+};
+
+const dashboardSectionLabel = {
+  color: "#334155",
+  fontSize: 14,
+  fontWeight: 700,
+  letterSpacing: "-0.01em",
+  lineHeight: 1.35
+};
+
+const dashboardBarTrackSoft = {
+  width: "100%",
+  height: 10,
+  background: "rgba(148,163,184,0.22)",
+  borderRadius: 999,
+  overflow: "hidden"
+};
+
+const dashboardSectionFill = {
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #0ea5e9 0%, #22c55e 100%)"
+};
+
+const dashboardSectionValue = {
+  textAlign: "right",
+  color: "#0f172a",
+  fontSize: 14,
+  fontWeight: 800,
+  letterSpacing: "-0.01em"
+};
+
+const dashboardEmptyState = {
+  minHeight: 240,
+  borderRadius: 18,
+  border: "1px dashed rgba(148,163,184,0.4)",
+  background: "rgba(248,250,252,0.9)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  padding: 24,
+  color: "#64748b",
+  fontSize: 15,
+  fontWeight: 700,
+  lineHeight: 1.6
+};
 
 const adminLayout = {
   display: "grid",
